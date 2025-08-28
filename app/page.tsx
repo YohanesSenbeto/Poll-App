@@ -6,7 +6,7 @@ import {
     CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { BarChart3, PlusCircle, Users } from "lucide-react";
+import { BarChart3, PlusCircle, Users, Database } from "lucide-react";
 import Link from "next/link";
 
 export default function Home() {
@@ -22,7 +22,7 @@ export default function Home() {
                     </p>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-6xl mx-auto">
                     <Card className="hover:shadow-lg transition-shadow">
                         <CardHeader>
                             <div className="w-12 h-12 bg-blue-50 rounded-lg flex items-center justify-center mb-4">
@@ -74,6 +74,23 @@ export default function Home() {
                             </CardDescription>
                             <Button asChild className="w-full">
                                 <Link href="/auth/register">Sign Up</Link>
+                            </Button>
+                        </CardContent>
+                    </Card>
+
+                    <Card className="hover:shadow-lg transition-shadow">
+                        <CardHeader>
+                            <div className="w-12 h-12 bg-orange-50 rounded-lg flex items-center justify-center mb-4">
+                                <Database className="w-6 h-6 text-orange-500" />
+                            </div>
+                            <CardTitle className="text-lg">Test DB</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <CardDescription className="text-sm text-gray-600 mb-4">
+                                Check database connection
+                            </CardDescription>
+                            <Button asChild className="w-full">
+                                <Link href="/test-db">Test Connection</Link>
                             </Button>
                         </CardContent>
                     </Card>
