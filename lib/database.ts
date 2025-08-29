@@ -12,8 +12,8 @@ const getSupabaseClient = () => {
 }
 
 // Poll operations
-export async function createPoll({ question, description, options }: { 
-  question: string, 
+export async function createPoll({ title, description, options }: { 
+  title: string, // Changed from question to title
   description: string | null, 
   options: string[] 
 }) {
@@ -41,7 +41,7 @@ export async function createPoll({ question, description, options }: {
     const { data: poll, error: pollError } = await supabase
     .from('polls')
     .insert({
-      question,
+      title: title, // Changed from question to title
       description,
       user_id: user.id
     })

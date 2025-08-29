@@ -72,7 +72,7 @@ export default function Home() {
                             <CardDescription className="text-sm text-gray-600 mb-4">
                                 Sign up to get started
                             </CardDescription>
-                            <Button asChild className="w-full">
+                            <Button asChild className="w-full my-5">
                                 <Link href="/auth/register">Sign Up</Link>
                             </Button>
                         </CardContent>
@@ -89,7 +89,7 @@ export default function Home() {
                             <CardDescription className="text-sm text-gray-600 mb-4">
                                 Check database connection
                             </CardDescription>
-                            <Button asChild className="w-full">
+                            <Button asChild className="w-full my-5">
                                 <Link href="/test-db">Test Connection</Link>
                             </Button>
                         </CardContent>
