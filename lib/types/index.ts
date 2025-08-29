@@ -1,13 +1,14 @@
-import { Database } from '../../types/database';
+import { Database } from '@/types/database';
 
 export type Tables<T extends keyof Database['public']['Tables']> = Database['public']['Tables'][T]['Row'];
 export type InsertTables<T extends keyof Database['public']['Tables']> = Database['public']['Tables'][T]['Insert'];
 export type UpdateTables<T extends keyof Database['public']['Tables']> = Database['public']['Tables'][T]['Update'];
 
 export type Poll = Tables<'polls'>;
-export type PollOption = Tables<'poll_options'>;
+export type PollOption = Tables<'options'>;
 export type Vote = Tables<'votes'>;
-export type Profile = Tables<'profiles'>;
+// Note: 'profiles' table not found in current schema - may need to be added separately
+// export type Profile = Tables<'profiles'>;
 
 export interface PollWithOptions extends Poll {
   options: PollOption[];

@@ -1,14 +1,32 @@
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { supabase as serverSupabase } from './supabase'
-import { Database, Poll, Option, Vote, PollStatistics, PollResult } from '@/types/database'
 
 // Use the appropriate client based on context
 const getSupabaseClient = () => {
   // Check if we're in a browser environment
   if (typeof window !== 'undefined') {
-    return createClientComponentClient<Database>()
+    return createClientComponentClient()
   }
   return serverSupabase
+}
+
+// Helper function to check authentication
+async function checkAuthentication() {
+  const supabase = getSupabaseClient()
+  const { data: { user }, error } = await supabase.auth.getUser()
+  
+  if (error || !user) {
+    console.error('Authentication check failed:', error)
+    if (error?.message?.includes('Auth session missing')) {
+      throw new Error('Authentication session expired. Please login again to continue.')
+    }
+    if (error?.message?.includes('JWT')) {
+      throw new Error('Authentication token invalid. Please login again.')
+    }
+    throw new Error('Please login to continue')
+  }
+  
+  return user
 }
 
 // Poll operations
@@ -19,18 +37,8 @@ export async function createPoll({ title, description, options }: {
 }) {
   try {
     const supabase = getSupabaseClient()
-    console.log('Checking authentication...')
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    
-    if (authError) {
-      console.error('Authentication error:', authError)
-      throw new Error(`Authentication failed: ${authError.message}`)
-    }
-    
-    if (!user) {
-      console.error('No user found - user not authenticated')
-      throw new Error('User not authenticated')
-    }
+    const user = await checkAuthentication()
+    console.log('User authenticated:', user.id)
     
     // Debug: Test basic connection
     console.log('User authenticated:', user.id)
@@ -139,8 +147,7 @@ export async function getUserPolls(userId: string) {
 // Vote operations
 export async function voteOnPoll(pollId: string, optionId: string) {
   const supabase = getSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) throw new Error('User not authenticated')
+  const user = await checkAuthentication()
 
   // Check if user has already voted on this poll
   const { data: existingVote } = await supabase

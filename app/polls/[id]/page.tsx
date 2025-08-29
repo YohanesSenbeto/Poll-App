@@ -90,7 +90,7 @@ function PollView() {
         return (
             <div className="max-w-2xl mx-auto py-8">
                 <div className="flex justify-center items-center h-64">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 dark:border-blue-400"></div>
                 </div>
             </div>
         );
@@ -99,9 +99,9 @@ function PollView() {
     if (!poll) {
         return (
             <div className="max-w-2xl mx-auto py-8">
-                <Card>
+                <Card className="bg-card">
                     <CardContent className="text-center py-12">
-                        <h2 className="text-2xl font-bold mb-2">
+                        <h2 className="text-2xl font-bold mb-2 text-foreground">
                             Poll Not Found
                         </h2>
                         <p className="text-muted-foreground mb-4">
@@ -128,14 +128,14 @@ function PollView() {
                 </Link>
             </Button>
 
-            <Card>
+            <Card className="bg-card">
                 <CardHeader>
                     <div className="flex items-center justify-between">
-                        <CardTitle className="text-2xl">
+                        <CardTitle className="text-2xl text-foreground">
                             {poll.question}
                         </CardTitle>
                         {userVoted && (
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300">
                                 <CheckCircle className="h-3 w-3 mr-1" />
                                 Voted
                             </span>
@@ -177,7 +177,7 @@ function PollView() {
                                 return (
                                     <div key={option.id} className="space-y-2">
                                         <div className="flex justify-between items-center">
-                                            <span className="font-medium">
+                                            <span className="font-medium text-foreground">
                                                 {option.text}
                                             </span>
                                             <span className="text-sm text-muted-foreground">

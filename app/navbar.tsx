@@ -13,6 +13,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { LogOut, PlusCircle, BarChart3 } from "lucide-react";
 import { useAuth } from "@/app/auth-context";
+import { ThemeToggle } from "@/components/theme-toggle";
+import { PollLogo } from "@/components/poll-logo";
 
 export function Navbar() {
     const { user, signOut } = useAuth();
@@ -33,9 +35,10 @@ export function Navbar() {
                 <div className="flex items-center space-x-8">
                     <Link
                         href="/"
-                        className="text-xl font-bold text-primary"
+                        className="flex items-center space-x-2"
                     >
-                        Poll App
+                        <PollLogo className="h-8 w-8" />
+                        <span className="text-xl font-bold text-primary">Poll App</span>
                     </Link>
                     <div className="hidden md:flex items-center space-x-6">
                         <Link
@@ -57,6 +60,7 @@ export function Navbar() {
                     </div>
                 </div>
                 <div className="flex items-center space-x-4">
+                    <ThemeToggle />
                     {user ? (
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>

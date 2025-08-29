@@ -1,7 +1,13 @@
-import { Notification } from '@/lib/types';
+// Export the Notification interface
+export interface Notification {
+  id: string;
+  type: 'success' | 'error' | 'warning' | 'info';
+  title: string;
+  message: string;
+  duration?: number;
+}
 
 class NotificationManager {
-  [x: string]: any;
   private listeners: Array<(notifications: Notification[]) => void> = [];
   private notifications: Notification[] = [];
 
@@ -32,6 +38,7 @@ class NotificationManager {
 
   subscribe(callback: (notifications: Notification[]) => void): () => void {
     this.listeners.push(callback);
+    callback(this.notifications); // Notify with current notifications immediately
     return () => {
       this.listeners = this.listeners.filter(l => l !== callback);
     };

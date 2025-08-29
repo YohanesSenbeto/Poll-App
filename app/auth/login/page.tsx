@@ -74,13 +74,13 @@ const LoginPage = () => {
     };
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-purple-50 p-4">
-            <Card className="w-full max-w-md">
+        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-purple-50 dark:from-gray-900 dark:to-gray-800 p-4">
+            <Card className="w-full max-w-md bg-card">
                 <CardHeader className="text-center">
-                    <CardTitle className="text-3xl font-bold text-gray-800">
+                    <CardTitle className="text-3xl font-bold text-foreground">
                         Welcome Back
                     </CardTitle>
-                    <CardDescription className="text-gray-600">
+                    <CardDescription className="text-muted-foreground">
                         Enter your credentials to access your account
                     </CardDescription>
                 </CardHeader>
@@ -89,7 +89,7 @@ const LoginPage = () => {
                         <div className="space-y-2">
                             <Label
                                 htmlFor="email"
-                                className="text-sm font-medium text-gray-700"
+                                className="text-sm font-medium text-foreground"
                             >
                                 Email Address
                             </Label>
@@ -101,10 +101,10 @@ const LoginPage = () => {
                                 value={formData.email}
                                 onChange={handleChange}
                                 required
-                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                className="w-full px-3 py-2 border border-input bg-background text-foreground rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                             />
                             {fieldErrors.email && (
-                                <p className="text-sm text-red-500 mt-1">
+                                <p className="text-sm text-red-500 dark:text-red-400 mt-1">
                                     {fieldErrors.email}
                                 </p>
                             )}
@@ -113,7 +113,7 @@ const LoginPage = () => {
                         <div className="space-y-2">
                             <Label
                                 htmlFor="password"
-                                className="text-sm font-medium text-gray-700"
+                                className="text-sm font-medium text-foreground"
                             >
                                 Password
                             </Label>
@@ -125,10 +125,10 @@ const LoginPage = () => {
                                 value={formData.password}
                                 onChange={handleChange}
                                 required
-                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                className="w-full px-3 py-2 border border-input bg-background text-foreground rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                             />
                             {fieldErrors.password && (
-                                <p className="text-sm text-red-500 mt-1">
+                                <p className="text-sm text-red-500 dark:text-red-400 mt-1">
                                     {fieldErrors.password}
                                 </p>
                             )}
@@ -151,11 +151,11 @@ const LoginPage = () => {
                     </form>
 
                     <div className="mt-6 text-center">
-                        <p className="text-sm text-gray-600">
+                        <p className="text-sm text-muted-foreground">
                             Don't have an account?{" "}
                             <a
                                 href="/auth/register"
-                                className="text-blue-600 hover:text-blue-700 font-medium transition-colors duration-200"
+                                className="text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 font-medium transition-colors duration-200"
                             >
                                 Create one here
                             </a>
