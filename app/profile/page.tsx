@@ -654,7 +654,7 @@ export default function ProfilePage() {
                                 Update your profile picture
                             </CardDescription>
                             {storageStatus === "missing" && (
-                                <Alert variant="warning" className="mt-2">
+                                <Alert variant="destructive" className="mt-2">
                                     <AlertTitle>
                                         Storage Not Configured
                                     </AlertTitle>
