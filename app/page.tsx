@@ -22,8 +22,8 @@ export default function Home() {
                     </p>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-6xl  mx-25 ">
-                    <Card className="hover:shadow-lg transition-shadow">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl  mx-25 items-center ">
+                    <Card className="hover:shadow-lg transition-shadow w-65 h-70">
                         <CardHeader>
                             <div className="w-12 h-12 bg-blue-100/50 dark:bg-blue-900/20 rounded-lg flex items-center justify-center mb-4">
                                 <BarChart3 className="w-6 h-6 text-blue-600 dark:text-blue-400" />
@@ -42,7 +42,7 @@ export default function Home() {
                         </CardContent>
                     </Card>
 
-                    <Card className="hover:shadow-lg transition-shadow">
+                    <Card className="hover:shadow-lg transition-shadow w-65 h-70">
                         <CardHeader>
                             <div className="w-12 h-12 bg-green-100/50 dark:bg-green-900/20 rounded-lg flex items-center justify-center mb-4">
                                 <PlusCircle className="w-6 h-6 text-green-600 dark:text-green-400" />
@@ -61,7 +61,7 @@ export default function Home() {
                         </CardContent>
                     </Card>
 
-                    <Card className="hover:shadow-lg transition-shadow">
+                    <Card className="hover:shadow-lg transition-shadow w-65 h-70 ">
                         <CardHeader>
                             <div className="w-12 h-12 bg-purple-100/50 dark:bg-purple-900/20 rounded-lg flex items-center justify-center mb-4">
                                 <Users className="w-6 h-6 text-purple-600 dark:text-purple-400" />
@@ -72,7 +72,7 @@ export default function Home() {
                             <CardDescription className="text-sm text-muted-foreground mb-4">
                                 Sign up to get started
                             </CardDescription>
-                            <Button asChild className="w-full my-5">
+                            <Button asChild className="w-full ">
                                 <Link href="/auth/register">Sign Up</Link>
                             </Button>
                         </CardContent>
