@@ -11,13 +11,15 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { LogOut, PlusCircle, BarChart3 } from "lucide-react";
+import { LogOut, PlusCircle, BarChart3, Menu, X } from "lucide-react";
+import { useState } from "react";
 import { useAuth } from "@/app/auth-context";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { PollLogo } from "@/components/poll-logo";
 
 export function Navbar() {
     const { user, signOut } = useAuth();
+    const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
     const handleLogout = async () => {
         try {
@@ -31,94 +33,147 @@ export function Navbar() {
 
     return (
         <header className="border-b bg-background shadow-sm">
-            <nav className="w-full max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 flex items-center justify-between py-3 sm:py-4">
-                <div className="flex items-center space-x-4 sm:space-x-8">
-                    <Link
-                        href="/"
-                        className="flex items-center space-x-2"
-                    >
-                        <PollLogo className="h-8 w-8" />
-                        <span className="text-xl font-bold text-primary">Poll App</span>
-                    </Link>
-                    <div className="hidden md:flex items-center space-x-6">
+            <nav className="w-full max-w-7xl mx-auto px-2 sm:px-4 md:px-6 lg:px-8">
+                <div className="flex items-center justify-between py-2 sm:py-4">
+                    <div className="flex items-center space-x-2 sm:space-x-8">
                         <Link
-                            href="/polls"
-                            className="text-sm font-medium text-foreground/70 hover:text-foreground transition-colors"
+                            href="/"
+                            className="flex items-center space-x-1 sm:space-x-2"
                         >
-                            <BarChart3 className="inline-block w-4 h-4 mr-2" />
-                            Browse Polls
+                            <PollLogo className="h-6 w-6 sm:h-8 sm:w-8" />
+                            <span className="text-base sm:text-lg md:text-xl font-bold text-primary">Poll App</span>
                         </Link>
-                        {user && (
+                        <div className="hidden md:flex items-center space-x-6">
                             <Link
-                                href="/polls/create"
+                                href="/polls"
                                 className="text-sm font-medium text-foreground/70 hover:text-foreground transition-colors"
                             >
-                                <PlusCircle className="inline-block w-4 h-4 mr-2" />
-                                Create Poll
+                                <BarChart3 className="inline-block w-4 h-4 mr-1" />
+                                Browse Polls
                             </Link>
+                            {user && (
+                                <Link
+                                    href="/polls/create"
+                                    className="text-sm font-medium text-foreground/70 hover:text-foreground transition-colors"
+                                >
+                                    <PlusCircle className="inline-block w-4 h-4 mr-1" />
+                                    Create Poll
+                                </Link>
+                            )}
+                        </div>
+                    </div>
+                    <div className="flex items-center space-x-1">
+                        <ThemeToggle />
+                        <button
+                            className="md:hidden p-1 rounded-md hover:bg-muted transition-colors"
+                            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                            aria-label="Toggle menu"
+                        >
+                            {mobileMenuOpen ? (
+                                <X className="h-4 w-4" />
+                            ) : (
+                                <Menu className="h-4 w-4" />
+                            )}
+                        </button>
+                        {user ? (
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button
+                                        variant="ghost"
+                                        className="relative h-6 w-6 sm:h-8 sm:w-8 rounded-full p-0"
+                                    >
+                                        <Avatar className="h-6 w-6 sm:h-8 sm:w-8">
+                                            <AvatarFallback className="bg-primary text-white text-xs">
+                                                {userInitial}
+                                            </AvatarFallback>
+                                        </Avatar>
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent
+                                    className="w-56"
+                                    align="end"
+                                >
+                                    <DropdownMenuLabel>
+                                        <div className="flex flex-col space-y-1">
+                                            <p className="text-sm font-medium leading-none">
+                                                My Account
+                                            </p>
+                                            <p className="text-xs leading-none text-muted-foreground">
+                                                {user.email}
+                                            </p>
+                                        </div>
+                                    </DropdownMenuLabel>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem asChild>
+                                        <Link href="/polls">My Polls</Link>
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem asChild>
+                                        <Link href="/profile">Profile Settings</Link>
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem
+                                        onClick={handleLogout}
+                                        className="text-destructive"
+                                    >
+                                        <LogOut className="mr-2 h-4 w-4" />
+                                        Logout
+                                    </DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                        ) : (
+                            <div className="hidden md:flex items-center space-x-1 sm:space-x-2">
+                                <Button variant="ghost" asChild size="sm">
+                                    <Link href="/auth/login">Login</Link>
+                                </Button>
+                                <Button asChild size="sm">
+                                    <Link href="/auth/register">
+                                        Register
+                                    </Link>
+                                </Button>
+                            </div>
                         )}
                     </div>
                 </div>
-                <div className="flex items-center space-x-4">
-                    <ThemeToggle />
-                    {user ? (
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <Button
-                                    variant="ghost"
-                                    className="relative h-8 w-8 rounded-full"
-                                >
-                                    <Avatar className="h-8 w-8">
-                                        <AvatarFallback className="bg-primary text-white">
-                                            {userInitial}
-                                        </AvatarFallback>
-                                    </Avatar>
-                                </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent
-                                className="w-56"
-                                align="end"
+                
+                {/* Mobile Menu */}
+                {mobileMenuOpen && (
+                    <div className="md:hidden border-t border-border">
+                        <div className="px-2 py-3 space-y-2">
+                            <Link
+                                href="/polls"
+                                className="flex items-center text-sm font-medium text-foreground/70 hover:text-foreground transition-colors py-2"
+                                onClick={() => setMobileMenuOpen(false)}
                             >
-                                <DropdownMenuLabel>
-                                    <div className="flex flex-col space-y-1">
-                                        <p className="text-sm font-medium leading-none">
-                                            My Account
-                                        </p>
-                                        <p className="text-xs leading-none text-muted-foreground">
-                                            {user.email}
-                                        </p>
-                                    </div>
-                                </DropdownMenuLabel>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem asChild>
-                                    <Link href="/polls">My Polls</Link>
-                                </DropdownMenuItem>
-                                <DropdownMenuItem asChild>
-                                    <Link href="/profile">Profile Settings</Link>
-                                </DropdownMenuItem>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem
-                                    onClick={handleLogout}
-                                    className="text-destructive"
+                                <BarChart3 className="w-4 h-4 mr-2" />
+                                Browse Polls
+                            </Link>
+                            {user && (
+                                <Link
+                                    href="/polls/create"
+                                    className="flex items-center text-sm font-medium text-foreground/70 hover:text-foreground transition-colors py-2"
+                                    onClick={() => setMobileMenuOpen(false)}
                                 >
-                                    <LogOut className="mr-2 h-4 w-4" />
-                                    Logout
-                                </DropdownMenuItem>
-                            </DropdownMenuContent>
-                        </DropdownMenu>
-                    ) : (
-                        <div className="flex items-center space-x-2">
-                            <Button variant="ghost" asChild>
-                                <Link href="/auth/login">Login</Link>
-                            </Button>
-                            <Button asChild>
-                                <Link href="/auth/register">
-                                    Register
+                                    <PlusCircle className="w-4 h-4 mr-2" />
+                                    Create Poll
                                 </Link>
-                            </Button>
+                            )}
+                            {!user && (
+                                <div className="space-y-3 pt-2 border-t border-border">
+                                    <Button variant="ghost" asChild className="w-full justify-start">
+                                        <Link href="/auth/login" onClick={() => setMobileMenuOpen(false)}>
+                                            Login
+                                        </Link>
+                                    </Button>
+                                    <Button asChild className="w-full justify-start">
+                                        <Link href="/auth/register" onClick={() => setMobileMenuOpen(false)}>
+                                            Register
+                                        </Link>
+                                    </Button>
+                                </div>
+                            )}
                         </div>
-                    )}
-                </div>
+                    </div>
+                )}
             </nav>
         </header>
     );
