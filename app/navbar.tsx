@@ -31,8 +31,8 @@ export function Navbar() {
 
     return (
         <header className="border-b bg-background shadow-sm">
-            <nav className="container flex items-center justify-between p-4">
-                <div className="flex items-center space-x-8">
+            <nav className="w-full max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 flex items-center justify-between py-3 sm:py-4">
+                <div className="flex items-center space-x-4 sm:space-x-8">
                     <Link
                         href="/"
                         className="flex items-center space-x-2"

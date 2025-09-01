@@ -251,10 +251,10 @@ export default function ProfilePage() {
         }
     };
 
-    const uploadAvatar = async () => {
+    const uploadAvatar = async (): Promise<boolean> => {
         if (!avatarFile || !user) {
             setError("No file selected or user not logged in");
-            return;
+            return false;
         }
 
         // Validate file
@@ -268,12 +268,12 @@ export default function ProfilePage() {
 
         if (!validTypes.includes(avatarFile.type)) {
             setError("Please select a valid image file (JPEG, PNG, or WebP)");
-            return;
+            return false;
         }
 
         if (avatarFile.size > maxSize) {
             setError("File size must be less than 5MB");
-            return;
+            return false;
         }
 
         setUploadingAvatar(true);
@@ -379,18 +379,12 @@ export default function ProfilePage() {
             setProfile((prev) =>
                 prev ? { ...prev, avatar_url: publicUrl } : null
             );
-            setAvatarFile(null);
-            setAvatarPreview(null);
             setSuccess("Avatar updated successfully!");
-
-            // Reset file input
-            const fileInput = document.getElementById(
-                "avatar-upload"
-            ) as HTMLInputElement;
-            if (fileInput) fileInput.value = "";
+            return true;
         } catch (error: any) {
             console.error("Avatar upload error:", error);
             setError(error.message || "Failed to upload avatar");
+            return false;
         } finally {
             setUploadingAvatar(false);
         }
@@ -419,15 +413,33 @@ export default function ProfilePage() {
 
             if (error) throw error;
 
+            // Update local state immediately
             setProfile((prev) => (prev ? { ...prev, ...updates } : null));
+
+            // Upload avatar if selected (wait for it to complete)
+            if (avatarFile) {
+                const avatarSuccess = await uploadAvatar();
+                if (!avatarSuccess) {
+                    // If avatar upload fails, don't show the general success message
+                    return;
+                }
+            }
+
             setSuccess("Profile updated successfully!");
 
+            // Reset avatar state after successful update
             if (avatarFile) {
-                await uploadAvatar();
+                setAvatarFile(null);
+                setAvatarPreview(null);
+                // Reset file input
+                const fileInput = document.getElementById(
+                    "avatar-upload"
+                ) as HTMLInputElement;
+                if (fileInput) fileInput.value = "";
             }
-        } catch (error) {
+        } catch (error: any) {
             console.error("Error updating profile:", error);
-            setError("Failed to update profile");
+            setError(error.message || "Failed to update profile");
         } finally {
             setUpdating(false);
         }
@@ -447,6 +459,19 @@ export default function ProfilePage() {
         setSuccess(null);
 
         try {
+            // First verify current password
+            const { error: signInError } =
+                await supabase.auth.signInWithPassword({
+                    email: user.email!,
+                    password: currentPassword,
+                });
+
+            if (signInError) {
+                setError("Current password is incorrect");
+                return;
+            }
+
+            // Then update password
             const { error } = await supabase.auth.updateUser({
                 password: newPassword,
             });
@@ -457,9 +482,9 @@ export default function ProfilePage() {
             setCurrentPassword("");
             setNewPassword("");
             setConfirmPassword("");
-        } catch (error) {
+        } catch (error: any) {
             console.error("Error changing password:", error);
-            setError("Failed to change password");
+            setError(error.message || "Failed to change password");
         } finally {
             setUpdating(false);
         }
@@ -874,6 +899,41 @@ export default function ProfilePage() {
                                 onSubmit={handlePasswordChange}
                                 className="space-y-4"
                             >
+                                <div className="space-y-2">
+                                    <Label htmlFor="currentPassword">
+                                        Current Password
+                                    </Label>
+                                    <div className="relative">
+                                        <Input
+                                            id="currentPassword"
+                                            type={
+                                                showPassword
+                                                    ? "text"
+                                                    : "password"
+                                            }
+                                            value={currentPassword}
+                                            onChange={(e) =>
+                                                setCurrentPassword(
+                                                    e.target.value
+                                                )
+                                            }
+                                            placeholder="Enter current password"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() =>
+                                                setShowPassword(!showPassword)
+                                            }
+                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                                        >
+                                            {showPassword ? (
+                                                <EyeOff size={16} />
+                                            ) : (
+                                                <Eye size={16} />
+                                            )}
+                                        </button>
+                                    </div>
+                                </div>
                                 <div className="space-y-2">
                                     <Label htmlFor="newPassword">
                                         New Password

@@ -233,8 +233,8 @@ function CreatePollForm() {
     };
 
     return (
-        <div className="max-w-2xl mx-auto py-8 px-4">
-            <Card className="border-2 shadow-lg bg-card">
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 py-8">
+            <Card className="border-2 shadow-lg bg-card max-w-2xl">
                 <CardHeader className="bg-gradient-to-r from-blue-50/50 dark:from-blue-900/20 to-purple-50/50 dark:to-purple-900/20 border-b">
                     <CardTitle className="text-2xl bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
                         Create New Poll
@@ -245,9 +245,9 @@ function CreatePollForm() {
                 </CardHeader>
                 <CardContent className="pt-6">
                     {!user ? (
-                        <div className="text-center py-8">
+                        <div className="text-left py-8">
                             <div className="mb-4 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-                                <AlertCircle className="h-6 w-6 text-red-600 dark:text-red-400 mx-auto mb-2" />
+                                <AlertCircle className="h-6 w-6 text-red-600 dark:text-red-400 mb-2" />
                                 <h3 className="text-lg font-semibold text-red-800 dark:text-red-300 mb-2">
                                     Authentication Required
                                 </h3>

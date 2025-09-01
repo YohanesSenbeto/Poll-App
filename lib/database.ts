@@ -205,6 +205,96 @@ export async function hasUserVoted(pollId: string, userId: string) {
   return !!data
 }
 
+export async function updatePoll(pollId: string, { title, description, options }: { 
+  title: string, 
+  description: string | null, 
+  options: string[] 
+}) {
+  try {
+    const supabase = getSupabaseClient()
+    const user = await checkAuthentication()
+    
+    // Check if the poll belongs to the current user
+    const { data: existingPoll, error: pollCheckError } = await supabase
+      .from('polls')
+      .select('user_id')
+      .eq('id', pollId)
+      .single()
+
+    if (pollCheckError) {
+      throw new Error(`Failed to check poll ownership: ${pollCheckError.message}`)
+    }
+
+    if (!existingPoll) {
+      throw new Error('Poll not found')
+    }
+
+    if (existingPoll.user_id !== user.id) {
+      throw new Error('You can only edit your own polls')
+    }
+
+    // Check if poll has any votes
+    const { data: voteCount } = await supabase
+      .from('votes')
+      .select('count')
+      .eq('poll_id', pollId)
+      .single()
+
+    if (voteCount && voteCount.count > 0) {
+      throw new Error('Cannot edit a poll that already has votes')
+    }
+
+    // Update poll
+    const { data: updatedPoll, error: updateError } = await supabase
+      .from('polls')
+      .update({
+        title,
+        description,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', pollId)
+      .select()
+      .single()
+
+    if (updateError) {
+      throw new Error(`Failed to update poll: ${updateError.message}`)
+    }
+
+    // Delete existing options
+    const { error: deleteOptionsError } = await supabase
+      .from('options')
+      .delete()
+      .eq('poll_id', pollId)
+
+    if (deleteOptionsError) {
+      throw new Error(`Failed to delete existing options: ${deleteOptionsError.message}`)
+    }
+
+    // Create new options
+    const optionsData = options.map(text => ({
+      poll_id: pollId,
+      text
+    }))
+
+    const { data: newOptions, error: createOptionsError } = await supabase
+      .from('options')
+      .insert(optionsData)
+      .select()
+
+    if (createOptionsError) {
+      throw new Error(`Failed to create new options: ${createOptionsError.message}`)
+    }
+
+    return {
+      ...updatedPoll,
+      options: newOptions || []
+    }
+  } catch (error) {
+    console.error('Error in updatePoll:', error)
+    throw error
+  }
+}
+
 // Delete operations
 export async function deletePoll(pollId: string) {
   const supabase = getSupabaseClient()

@@ -16,7 +16,8 @@ import {
 } from "@/lib/database";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import Link from "next/link";
-import { ArrowLeft, CheckCircle, Clock, Users } from "lucide-react";
+import { ArrowLeft, CheckCircle, Clock, Users, Edit } from "lucide-react";
+import type { Poll, PollOption } from "@/lib/types";
 
 function PollView() {
     const params = useParams();
@@ -46,6 +47,11 @@ function PollView() {
                 if (currentUser) {
                     const voted = await hasUserVoted(pollId, currentUser.id);
                     setUserVoted(voted);
+                    
+                    // Check if current user is the owner
+                    if (pollData && pollData.user_id === currentUser.id) {
+                        setIsOwner(true);
+                    }
                 }
 
                 const resultsData = await getPollResults(pollId);
@@ -88,8 +94,8 @@ function PollView() {
 
     if (loading) {
         return (
-            <div className="max-w-2xl mx-auto py-8">
-                <div className="flex justify-center items-center h-64">
+            <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 py-8">
+                <div className="flex justify-start items-center h-64">
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 dark:border-blue-400"></div>
                 </div>
             </div>
@@ -98,9 +104,9 @@ function PollView() {
 
     if (!poll) {
         return (
-            <div className="max-w-2xl mx-auto py-8">
+            <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 py-8">
                 <Card className="bg-card">
-                    <CardContent className="text-center py-12">
+                    <CardContent className="text-left py-12">
                         <h2 className="text-2xl font-bold mb-2 text-foreground">
                             Poll Not Found
                         </h2>
@@ -120,7 +126,7 @@ function PollView() {
     const totalVotes = results?.total_votes || 0;
 
     return (
-        <div className="max-w-2xl mx-auto py-8">
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 py-8">
             <Button asChild variant="ghost" className="mb-4">
                 <Link href="/polls">
                     <ArrowLeft className="h-4 w-4 mr-2" />
@@ -128,18 +134,28 @@ function PollView() {
                 </Link>
             </Button>
 
-            <Card className="bg-card">
+            <Card className="bg-card max-w-2xl">
                 <CardHeader>
                     <div className="flex items-center justify-between">
                         <CardTitle className="text-2xl text-foreground">
-                            {poll.question}
+                            {poll.title}
                         </CardTitle>
-                        {userVoted && (
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300">
-                                <CheckCircle className="h-3 w-3 mr-1" />
-                                Voted
-                            </span>
-                        )}
+                        <div className="flex items-center gap-2">
+                            {userVoted && (
+                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300">
+                                    <CheckCircle className="h-3 w-3 mr-1" />
+                                    Voted
+                                </span>
+                            )}
+                            {isOwner && totalVotes === 0 && (
+                                <Button asChild variant="outline" size="sm">
+                                    <Link href={`/polls/${pollId}/edit`}>
+                                        <Edit className="h-4 w-4 mr-1" />
+                                        Edit
+                                    </Link>
+                                </Button>
+                            )}
+                        </div>
                     </div>
                     {poll.description && (
                         <p className="text-muted-foreground">

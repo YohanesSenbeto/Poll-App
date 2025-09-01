@@ -56,8 +56,8 @@ export default function PollsPage() {
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-background to-muted/20">
-            <div className="container mx-auto px-4 py-8">
-                <div className="flex justify-between items-center mb-8">
+            <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 py-3 sm:py-4 md:py-6 lg:py-8 text-left">
+                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-6">
                     <div>
                         <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
                             Poll Dashboard
@@ -75,7 +75,7 @@ export default function PollsPage() {
                 </div>
 
                 {/* Statistics Cards */}
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 justify-start">
                     <Card className="bg-gradient-to-br from-blue-100/50 dark:from-blue-900/20 to-blue-200/30 dark:to-blue-800/10 border-blue-200 dark:border-blue-800">
                         <CardContent className="p-4">
                             <div className="flex items-center justify-between">
@@ -161,7 +161,7 @@ export default function PollsPage() {
                             </CardContent>
                         </Card>
                     ) : (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 justify-start">
                             {polls.map((poll) => {
                                 const totalVotes =
                                     poll.options?.reduce(

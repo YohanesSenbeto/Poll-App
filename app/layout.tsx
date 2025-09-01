@@ -1,4 +1,5 @@
 import { Geist, Geist_Mono } from "next/font/google";
+import type { Metadata } from "next";
 import "./globals.css";
 import { AuthProvider } from "./auth-context";
 import { Navbar } from "@/app/navbar";
@@ -16,6 +17,12 @@ const geistMono = Geist_Mono({
     subsets: ["latin"],
 });
 
+export const metadata: Metadata = {
+    title: "Poll App",
+    description: "Create and vote on polls",
+    viewport: "width=device-width, initial-scale=1, maximum-scale=5",
+};
+
 export default function RootLayout({
     children,
 }: Readonly<{
@@ -24,13 +31,13 @@ export default function RootLayout({
     return (
         <html lang="en" suppressHydrationWarning>
             <body
-                className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+                className={`${geistSans.variable} ${geistMono.variable} antialiased overflow-x-hidden`}
             >
                 <ThemeProvider>
                     <AuthProvider>
                         <Navbar />
                         <NotificationContainer />
-                        <main className="container py-8 min-h-[calc(100vh-200px)]">
+                        <main className="w-full max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 py-3 sm:py-4 md:py-6 lg:py-8 min-h-[calc(100vh-200px)]">
                             {children}
                         </main>
                         <Footer />

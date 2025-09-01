@@ -118,5 +118,49 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+  
+  /* Responsive typography */
+  html {
+    scroll-behavior: smooth;
+  }
+  
+  @media (max-width: 320px) {
+    body {
+      font-size: 0.8125rem;
+      line-height: 1.4;
+    }
+    
+    .min-h-\[calc\(100vh-200px\)\] {
+      min-height: calc(100vh - 120px) !important;
+    }
+    
+    .space-y-4 > :not([hidden]) ~ :not([hidden]) {
+      --tw-space-y-reverse: 0;
+      margin-top: calc(0.5rem * calc(1 - var(--tw-space-y-reverse)));
+      margin-bottom: calc(0.5rem * var(--tw-space-y-reverse));
+    }
+  }
+  
+  @media (min-width: 321px) and (max-width: 640px) {
+    body {
+      font-size: 0.875rem;
+      line-height: 1.5;
+    }
+  }
+  
+  @media (min-width: 641px) and (max-width: 1024px) {
+    body {
+      font-size: 0.9375rem;
+      line-height: 1.6;
+    }
+  }
+  
+  @media (min-width: 1025px) {
+    body {
+      font-size: 1rem;
+      line-height: 1.7;
+    }
   }
 }
