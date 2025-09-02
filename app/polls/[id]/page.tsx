@@ -30,6 +30,7 @@ function PollView() {
     const [userVoted, setUserVoted] = useState(false);
     const [results, setResults] = useState<any>(null);
     const [user, setUser] = useState<any>(null);
+    const [isOwner, setIsOwner] = useState(false);
 
     const supabase = createClientComponentClient();
 
