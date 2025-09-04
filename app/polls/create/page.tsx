@@ -59,21 +59,26 @@ function CreatePollForm() {
         // Validate session on page load
         const validateSession = async () => {
             if (!user) return;
-            
+
             try {
-                const { createClientComponentClient } = await import('@supabase/auth-helpers-nextjs');
+                const { createClientComponentClient } = await import(
+                    "@supabase/auth-helpers-nextjs"
+                );
                 const supabase = createClientComponentClient();
-                const { data: { session }, error } = await supabase.auth.getSession();
-                
+                const {
+                    data: { session },
+                    error,
+                } = await supabase.auth.getSession();
+
                 if (error || !session) {
-                    console.warn('Session validation failed:', error);
+                    console.warn("Session validation failed:", error);
                     // Will be handled by the form submission logic
                 }
             } catch (error) {
-                console.error('Session validation error:', error);
+                console.error("Session validation error:", error);
             }
         };
-        
+
         validateSession();
     }, [searchParams, user]);
 
@@ -109,6 +114,8 @@ function CreatePollForm() {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
+        const redirectTo = "/auth/login?redirectTo=/polls/create";
+
         if (!user) {
             notificationManager.addNotification({
                 type: "warning",
@@ -116,12 +123,20 @@ function CreatePollForm() {
                 message: "Please login to create polls",
                 duration: 5000,
             });
-            router.push("/auth/login?redirectTo=/polls/create");
+            router.push(redirectTo);
             return;
         }
 
+        // Precompute sanitized values to avoid repeated work
+        const cleanedOptions = options.map((opt) => opt.trim()).filter(Boolean);
+        const payload = {
+            title: title.trim(),
+            description: description.trim() || null,
+            options: cleanedOptions,
+        };
+
         console.log("Form data before validation:", {
-            title, // Using title
+            title, // Using title (raw for pre-validation log)
             description,
             options: options.filter((opt) => opt.trim()),
         });
@@ -141,40 +156,38 @@ function CreatePollForm() {
         setLoading(true);
 
         try {
-            console.log("Creating poll with data:", {
-                title: title.trim(), // Using title
-                description: description.trim() || null,
-                options: options
-                    .filter((opt) => opt.trim())
-                    .map((opt) => opt.trim()),
-            });
+            console.log("Creating poll with data:", payload);
+
+            // Parallelize dynamic imports for performance
+            const [
+                { createClientComponentClient },
+                { createPoll },
+            ] = await Promise.all([
+                import("@supabase/auth-helpers-nextjs"),
+                import("@/lib/database"),
+            ]);
 
             // Double-check authentication before proceeding
-            const { createClientComponentClient } = await import('@supabase/auth-helpers-nextjs');
             const supabase = createClientComponentClient();
-            const { data: { user: currentUser }, error: authCheckError } = await supabase.auth.getUser();
-            
+            const {
+                data: { user: currentUser },
+                error: authCheckError,
+            } = await supabase.auth.getUser();
+
             if (authCheckError || !currentUser) {
                 console.error("Authentication check failed:", authCheckError);
                 notificationManager.addNotification({
                     type: "error",
                     title: "Authentication Required",
-                    message: "Your session has expired. Please login again to continue.",
+                    message:
+                        "Your session has expired. Please login again to continue.",
                     duration: 8000,
                 });
-                router.push('/auth/login?redirectTo=/polls/create');
+                router.push(redirectTo);
                 return;
             }
 
-            const { createPoll } = await import("@/lib/database");
-
-            const poll = await createPoll({
-                title: title.trim(), // Using title
-                description: description.trim() || null,
-                options: options
-                    .filter((opt) => opt.trim())
-                    .map((opt) => opt.trim()),
-            });
+            const poll = await createPoll(payload);
 
             if (poll) {
                 notificationManager.addNotification({
@@ -209,15 +222,19 @@ function CreatePollForm() {
             }
 
             // Handle specific auth errors
-            if (errorMessage.includes('Auth session missing') || errorMessage.includes('Authentication failed')) {
-                errorMessage = "Your session has expired. Please login again to continue.";
+            if (
+                errorMessage.includes("Auth session missing") ||
+                errorMessage.includes("Authentication failed")
+            ) {
+                errorMessage =
+                    "Your session has expired. Please login again to continue.";
                 notificationManager.addNotification({
                     type: "error",
                     title: "Session Expired",
                     message: errorMessage,
                     duration: 8000,
                 });
-                router.push('/auth/login?redirectTo=/polls/create');
+                router.push(redirectTo);
                 return;
             }
 
@@ -358,15 +375,15 @@ function CreatePollForm() {
                                         </div>
                                         {options.length > 2 && (
                                             <Button
-                                        type="button"
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={() =>
-                                            removeOption(index)
-                                        }
-                                        className="hover:bg-red-100 hover:text-red-600 text-muted-foreground dark:hover:bg-red-900/20"
-                                        disabled={loading}
-                                    >
+                                                type="button"
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={() =>
+                                                    removeOption(index)
+                                                }
+                                                className="hover:bg-red-100 hover:text-red-600 text-muted-foreground dark:hover:bg-red-900/20"
+                                                disabled={loading}
+                                            >
                                                 <Trash2 className="h-4 w-4" />
                                             </Button>
                                         )}
