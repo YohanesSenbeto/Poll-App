@@ -11,14 +11,14 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { LogOut, PlusCircle, BarChart3, Menu, X } from "lucide-react";
+import { LogOut, PlusCircle, BarChart3, Menu, X, Shield } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "@/app/auth-context";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { PollLogo } from "@/components/poll-logo";
 
 export function Navbar() {
-    const { user, signOut } = useAuth();
+    const { user, signOut, isAdmin } = useAuth();
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
     const handleLogout = async () => {
@@ -52,13 +52,24 @@ export function Navbar() {
                                 Browse Polls
                             </Link>
                             {user && (
-                                <Link
-                                    href="/polls/create"
-                                    className="text-sm font-medium text-foreground/70 hover:text-foreground transition-colors"
-                                >
-                                    <PlusCircle className="inline-block w-4 h-4 mr-1" />
-                                    Create Poll
-                                </Link>
+                                <>
+                                    <Link
+                                        href="/polls/create"
+                                        className="text-sm font-medium text-foreground/70 hover:text-foreground transition-colors"
+                                    >
+                                        <PlusCircle className="inline-block w-4 h-4 mr-1" />
+                                        Create Poll
+                                    </Link>
+                                    {isAdmin && (
+                                        <Link
+                                            href="/admin"
+                                            className="text-sm font-medium text-foreground/70 hover:text-foreground transition-colors"
+                                        >
+                                            <Shield className="inline-block w-4 h-4 mr-1" />
+                                            Admin
+                                        </Link>
+                                    )}
+                                </>
                             )}
                         </div>
                     </div>
@@ -110,6 +121,11 @@ export function Navbar() {
                                     <DropdownMenuItem asChild>
                                         <Link href="/profile">Profile Settings</Link>
                                     </DropdownMenuItem>
+                                    {isAdmin && (
+                                        <DropdownMenuItem asChild>
+                                            <Link href="/admin">Admin Dashboard</Link>
+                                        </DropdownMenuItem>
+                                    )}
                                     <DropdownMenuSeparator />
                                     <DropdownMenuItem
                                         onClick={handleLogout}
@@ -148,14 +164,26 @@ export function Navbar() {
                                 Browse Polls
                             </Link>
                             {user && (
-                                <Link
-                                    href="/polls/create"
-                                    className="flex items-center text-sm font-medium text-foreground/70 hover:text-foreground transition-colors py-2"
-                                    onClick={() => setMobileMenuOpen(false)}
-                                >
-                                    <PlusCircle className="w-4 h-4 mr-2" />
-                                    Create Poll
-                                </Link>
+                                <>
+                                    <Link
+                                        href="/polls/create"
+                                        className="flex items-center text-sm font-medium text-foreground/70 hover:text-foreground transition-colors py-2"
+                                        onClick={() => setMobileMenuOpen(false)}
+                                    >
+                                        <PlusCircle className="w-4 h-4 mr-2" />
+                                        Create Poll
+                                    </Link>
+                                    {isAdmin && (
+                                        <Link
+                                            href="/admin"
+                                            className="flex items-center text-sm font-medium text-foreground/70 hover:text-foreground transition-colors py-2"
+                                            onClick={() => setMobileMenuOpen(false)}
+                                        >
+                                            <Shield className="w-4 h-4 mr-2" />
+                                            Admin
+                                        </Link>
+                                    )}
+                                </>
                             )}
                             {!user && (
                                 <div className="space-y-3 pt-2 border-t border-border">

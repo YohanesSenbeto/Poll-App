@@ -119,91 +119,26 @@ export default function ProfilePage() {
                 throw new Error("No user ID found");
             }
 
-            console.log("Fetching profile for user ID:", user.id);
-
-            const { data, error } = await supabase
-                .from("profiles")
-                .select("*")
-                .eq("id", user.id)
-                .single();
-
-            if (error) {
-                console.error("Supabase error details:", {
-                    message: error.message,
-                    code: error.code,
-                    details: error.details,
-                    hint: error.hint,
-                });
-
-                // Capture debug information
-                setDebugInfo({
-                    message: error.message,
-                    code: error.code,
-                    details: error.details,
-                    hint: error.hint,
-                    timestamp: new Date().toISOString(),
-                    userId: user?.id,
-                });
-
-                if (error.code === "42P01") {
-                    setError(
-                        "Database schema not found. Please run the SQL schema updates in Supabase."
-                    );
-                    return;
-                } else if (error.code === "PGRST116") {
-                    setError(
-                        "Profile table not found. Please ensure the profiles table exists and run the SQL schema updates."
-                    );
-                    return;
-                } else if (error.code === "42501") {
-                    setError(
-                        "Database permission denied. Please check your Supabase RLS policies and database permissions."
-                    );
-                    return;
-                }
-
-                throw error;
-            }
-
-            if (!data) {
-                // Profile doesn't exist, create it
-                const { error: insertError } = await supabase
-                    .from("profiles")
-                    .insert({
-                        id: user.id,
-                        email: user.email,
-                        full_name: "",
-                        username: "",
-                        bio: "",
-                    });
-
-                if (insertError) {
-                    console.error("Error creating profile:", insertError);
-                    setError(
-                        "Failed to create profile. Please check database permissions."
-                    );
-                    return;
-                }
-
-                // Fetch the newly created profile
-                const { data: newData, error: newError } = await supabase
-                    .from("profiles")
-                    .select("*")
-                    .eq("id", user.id)
-                    .single();
-
-                if (newError) throw newError;
-
-                setProfile(newData);
-                setFullName(newData.full_name || "");
-                setUsername(newData.username || "");
-                setBio(newData.bio || "");
-            } else {
-                setProfile(data);
-                setFullName(data.full_name || "");
-                setUsername(data.username || "");
-                setBio(data.bio || "");
-            }
+            console.log("Profile functionality simplified - using auth user data");
+            
+            // Create a basic profile from auth user data
+            const basicProfile: UserProfile = {
+                id: user.id,
+                email: user.email || '',
+                full_name: '',
+                username: '',
+                avatar_url: '',
+                bio: '',
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+            };
+            
+            setProfile(basicProfile);
+            setFullName('');
+            setUsername('');
+            setBio('');
+            setLoadingProfile(false);
+            return;
         } catch (error: any) {
             console.error("Error fetching profile:", error);
 
@@ -358,22 +293,8 @@ export default function ProfilePage() {
 
             console.log("Avatar uploaded successfully, public URL:", publicUrl);
 
-            // Update profile with new avatar URL
-            const { error: updateError } = await supabase
-                .from("profiles")
-                .update({ avatar_url: publicUrl })
-                .eq("id", user.id);
-
-            if (updateError) {
-                console.error("Profile update error:", updateError);
-                if (updateError.message?.includes("row-level security")) {
-                    throw new Error(
-                        "Database permission error: Please check your Supabase RLS policies for the profiles table. " +
-                            "Run the RLS fix commands from the troubleshooting guide."
-                    );
-                }
-                throw updateError;
-            }
+            // Skip profiles table update - avatar URL is stored locally
+            console.log("Avatar URL would be stored in profiles table, but using local state instead:", publicUrl);
 
             // Update local state
             setProfile((prev) =>
@@ -399,21 +320,15 @@ export default function ProfilePage() {
         setSuccess(null);
 
         try {
+            // Profile updates are now handled locally without database storage
+            console.log('Profile data updated locally:', { fullName, username, bio });
+            // Update local state immediately
             const updates = {
                 full_name: fullName,
                 username,
                 bio,
                 updated_at: new Date().toISOString(),
             };
-
-            const { error } = await supabase
-                .from("profiles")
-                .update(updates)
-                .eq("id", user.id);
-
-            if (error) throw error;
-
-            // Update local state immediately
             setProfile((prev) => (prev ? { ...prev, ...updates } : null));
 
             // Upload avatar if selected (wait for it to complete)

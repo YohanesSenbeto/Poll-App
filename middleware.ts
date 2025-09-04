@@ -1,39 +1,61 @@
+// middleware.ts
 import { createMiddlewareClient } from '@supabase/auth-helpers-nextjs'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
-export async function middleware(request: NextRequest) {
+// Cache admin checks to avoid repeated database calls
+const adminCache = new Map<string, { isAdmin: boolean; timestamp: number }>()
+const CACHE_DURATION = 5 * 60 * 1000 // 5 minutes
+
+async function isAdmin(supabase: any, userId: string): Promise<boolean> {
+  // Check cache first
+  const cached = adminCache.get(userId)
+  if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+    return cached.isAdmin
+  }
+
   try {
-    const response = NextResponse.next({
-      request: {
-        headers: request.headers,
-      },
-    })
-
-    const supabase = createMiddlewareClient({ req: request, res: response })
-
-    // Refresh session if expired
-    const { data: { session } } = await supabase.auth.getSession()
-
-    // Protect routes that require authentication
-    if (request.nextUrl.pathname.startsWith('/polls/create') && !session) {
-      const redirectUrl = new URL('/auth/login', request.url)
-      redirectUrl.searchParams.set('redirectedFrom', request.nextUrl.pathname)
-      return NextResponse.redirect(redirectUrl)
+    const { data, error } = await supabase
+      .rpc('get_user_role', { user_id: userId })
+    
+    if (error) {
+      console.error('Error checking admin status:', error)
+      return false
     }
-
-    // Redirect authenticated users away from auth pages
-    if ((request.nextUrl.pathname.startsWith('/auth/login') || request.nextUrl.pathname.startsWith('/auth/register')) && session) {
-      return NextResponse.redirect(new URL('/polls', request.url))
-    }
-
-    return response
-  } catch (e) {
-    console.error('Middleware error:', e)
-    return NextResponse.next()
+    
+    const isAdminResult = data === 'admin'
+    
+    // Cache the result
+    adminCache.set(userId, { isAdmin: isAdminResult, timestamp: Date.now() })
+    
+    return isAdminResult
+  } catch (error) {
+    console.error('Exception checking admin status:', error)
+    return false
   }
 }
 
+export async function middleware(request: NextRequest) {
+  const response = NextResponse.next()
+  const supabase = createMiddlewareClient({ req: request, res: response })
+
+  // Only check admin status for admin routes
+  if (request.nextUrl.pathname.startsWith('/admin')) {
+    const { data: { session } } = await supabase.auth.getSession()
+
+    if (!session) {
+      return NextResponse.redirect(new URL('/auth/login', request.url))
+    }
+
+    const isUserAdmin = await isAdmin(supabase, session.user.id)
+    if (!isUserAdmin) {
+      return NextResponse.redirect(new URL('/unauthorized', request.url))
+    }
+  }
+
+  return response
+}
+
 export const config = {
-  matcher: ['/polls/create', '/auth/login', '/auth/register'],
+  matcher: ['/admin/:path*'],
 }

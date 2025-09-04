@@ -13,30 +13,66 @@ import Link from "next/link";
 import { BarChart3, Clock, Users, TrendingUp } from "lucide-react";
 import { getAllPolls, getPollStatistics } from "@/lib/database";
 import { useEffect, useState } from "react";
+import { useAuth } from "@/app/auth-context";
+import { supabase } from "@/lib/supabase";
 
 export default function PollsPage() {
     const [polls, setPolls] = useState<any[]>([]);
+    const [myPolls, setMyPolls] = useState<any[]>([]);
+    const [otherPolls, setOtherPolls] = useState<any[]>([]);
     const [statistics, setStatistics] = useState<any>(null);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    const { user } = useAuth();
 
     useEffect(() => {
         const fetchData = async () => {
             try {
+                setLoading(true);
+                console.log('Starting to fetch polls data...');
+                
                 const [allPolls, stats] = await Promise.all([
                     getAllPolls(),
                     getPollStatistics(),
                 ]);
+
+                console.log('Fetched polls:', allPolls);
+                console.log('Fetched statistics:', stats);
+
                 setPolls(allPolls || []);
                 setStatistics(stats);
+
+                // Separate polls into user's polls and others' polls
+                if (user) {
+                    const userPolls =
+                        allPolls?.filter((poll) => poll.user_id === user.id) ||
+                        [];
+                    const otherUsersPolls =
+                        allPolls?.filter((poll) => poll.user_id !== user.id) ||
+                        [];
+                    setMyPolls(userPolls);
+                    setOtherPolls(otherUsersPolls);
+                } else {
+                    setMyPolls([]);
+                    setOtherPolls(allPolls || []);
+                }
             } catch (error) {
-                console.error("Error fetching polls:", error);
+                console.error("Detailed error fetching polls:", error);
+                setError(error instanceof Error ? error.message : 'Unknown error occurred');
+                
+                // Provide more detailed error information
+                if (error instanceof Error) {
+                    console.error("Error name:", error.name);
+                    console.error("Error message:", error.message);
+                    console.error("Error stack:", error.stack);
+                }
             } finally {
                 setLoading(false);
             }
         };
 
         fetchData();
-    }, []);
+    }, [user]);
 
     if (loading) {
         return (
@@ -46,13 +82,40 @@ export default function PollsPage() {
         );
     }
 
+    if (error) {
+        return (
+            <div className="min-h-screen bg-gradient-to-br from-background to-muted/20">
+                <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 py-3 sm:py-4 md:py-6 lg:py-8 text-left">
+                    <div className="flex flex-col items-center justify-center py-12">
+                        <Card className="w-full max-w-md text-center">
+                            <CardContent className="py-8">
+                                <div className="mb-4">
+                                    <svg className="w-16 h-16 text-red-500 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                </div>
+                                <h1 className="text-2xl font-bold text-foreground mb-2">Error Loading Polls</h1>
+                                <p className="text-muted-foreground mb-4">{error}</p>
+                                <Button 
+                                    onClick={() => window.location.reload()} 
+                                    className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
+                                >
+                                    Try Again
+                                </Button>
+                            </CardContent>
+                        </Card>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
     const totalPolls = polls.length;
     const totalVotes = statistics?.total_votes || 0;
     const averageVotes =
         totalPolls > 0 ? Math.round(totalVotes / totalPolls) : 0;
 
-    // Calculate myPolls count (you'll need to implement proper user filtering)
-    const myPollsCount = 0; // TODO: implement user-based filtering once auth is ready
+    const myPollsCount = myPolls.length;
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-background to-muted/20">
@@ -141,17 +204,31 @@ export default function PollsPage() {
                     </Card>
                 </div>
 
-                {/* All Polls section */}
+                {/* My Polls section */}
+                {user && myPolls.length > 0 && (
+                    <div className="space-y-4">
+                        <h2 className="text-2xl font-semibold">My Polls</h2>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 justify-start">
+                            {myPolls.map((poll) => renderPollCard(poll, true))}
+                        </div>
+                    </div>
+                )}
+
+                {/* Other Users' Polls section */}
                 <div className="space-y-4">
-                    <h2 className="text-2xl font-semibold">All Polls</h2>
-                    {polls.length === 0 ? (
+                    <h2 className="text-2xl font-semibold">
+                        {user ? "Other Users' Polls" : "All Polls"}
+                    </h2>
+                    {otherPolls.length === 0 ? (
                         <Card className="text-center py-12 bg-card">
                             <CardContent>
                                 <h3 className="text-lg font-medium mb-2 text-foreground">
-                                    No polls yet
+                                    No polls available
                                 </h3>
                                 <p className="text-muted-foreground mb-4">
-                                    Be the first to create a poll!
+                                    {user
+                                        ? "No other polls to view"
+                                        : "Be the first to create a poll!"}
                                 </p>
                                 <Button asChild>
                                     <Link href="/polls/create">
@@ -162,66 +239,9 @@ export default function PollsPage() {
                         </Card>
                     ) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 justify-start">
-                            {polls.map((poll) => {
-                                const totalVotes =
-                                    poll.options?.reduce(
-                                        (sum: number, option: any) =>
-                                            sum + (option.votes_count || 0),
-                                        0
-                                    ) || 0;
-                                return (
-                                    <Card
-                                        key={poll.id}
-                                        className="hover:shadow-lg transition-shadow border-l-4 border-l-blue-500 bg-card"
-                                    >
-                                        <CardHeader>
-                                            <CardTitle className="text-lg text-foreground">
-                                                {poll.title}
-                                            </CardTitle>
-                                            <div className="flex items-center gap-2">
-                                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300">
-                                                    Active
-                                                </span>
-                                                <span className="text-sm text-muted-foreground">
-                                                    {new Date(
-                                                        poll.created_at
-                                                    ).toLocaleDateString()}
-                                                </span>
-                                            </div>
-                                        </CardHeader>
-                                        <CardContent>
-                                            <div className="space-y-2">
-                                                <div className="flex justify-between items-center">
-                                                    <span className="text-sm font-medium text-foreground">
-                                                        Total Votes
-                                                    </span>
-                                                    <span className="text-lg font-bold text-blue-600 dark:text-blue-400">
-                                                        {totalVotes}
-                                                    </span>
-                                                </div>
-                                                {poll.description && (
-                                                    <p className="text-sm text-muted-foreground line-clamp-2">
-                                                        {poll.description}
-                                                    </p>
-                                                )}
-                                            </div>
-                                        </CardContent>
-                                        <CardFooter>
-                                            <Button
-                                                asChild
-                                                variant="outline"
-                                                className="w-full hover:bg-blue-50 dark:hover:bg-blue-900/20"
-                                            >
-                                                <Link
-                                                    href={`/polls/${poll.id}`}
-                                                >
-                                                    View & Vote
-                                                </Link>
-                                            </Button>
-                                        </CardFooter>
-                                    </Card>
-                                );
-                            })}
+                            {otherPolls.map((poll) =>
+                                renderPollCard(poll, false)
+                            )}
                         </div>
                     )}
                 </div>
@@ -229,3 +249,58 @@ export default function PollsPage() {
         </div>
     );
 }
+
+const renderPollCard = (poll: any, isMyPoll: boolean) => {
+    const totalVotes =
+        poll.options?.reduce(
+            (sum: number, option: any) => sum + (option.votes_count || 0),
+            0
+        ) || 0;
+
+    return (
+        <Card
+            key={poll.id}
+            className="hover:shadow-lg transition-shadow border-l-4 border-l-blue-500 bg-card"
+        >
+            <CardHeader>
+                <CardTitle className="text-lg text-foreground">
+                    {poll.title}
+                </CardTitle>
+                <div className="flex items-center gap-2">
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300">
+                        {isMyPoll ? "My Poll" : "Active"}
+                    </span>
+                    <span className="text-sm text-muted-foreground">
+                        {new Date(poll.created_at).toLocaleDateString()}
+                    </span>
+                </div>
+            </CardHeader>
+            <CardContent>
+                <div className="space-y-2">
+                    <div className="flex justify-between items-center">
+                        <span className="text-sm font-medium text-foreground">
+                            Total Votes
+                        </span>
+                        <span className="text-lg font-bold text-blue-600 dark:text-blue-400">
+                            {totalVotes}
+                        </span>
+                    </div>
+                    {poll.description && (
+                        <p className="text-sm text-muted-foreground line-clamp-2">
+                            {poll.description}
+                        </p>
+                    )}
+                </div>
+            </CardContent>
+            <CardFooter>
+                <Button
+                    asChild
+                    variant="outline"
+                    className="w-full hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                >
+                    <Link href={`/polls/${poll.id}`}>View & Vote</Link>
+                </Button>
+            </CardFooter>
+        </Card>
+    );
+};

@@ -1,5 +1,6 @@
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { supabase as serverSupabase } from './supabase'
+import { Poll } from './types'
 
 // Use the appropriate client based on context
 const getSupabaseClient = () => {
@@ -31,7 +32,7 @@ async function checkAuthentication() {
 
 // Poll operations
 export async function createPoll({ title, description, options }: { 
-  title: string, // Changed from question to title
+  title: string,
   description: string | null, 
   options: string[] 
 }) {
@@ -41,20 +42,19 @@ export async function createPoll({ title, description, options }: {
     console.log('User authenticated:', user.id)
     
     // Debug: Test basic connection
-    console.log('User authenticated:', user.id)
     console.log('Testing basic query...')
     const testQuery = await supabase.from('polls').select('*').limit(1)
     console.log('Test query result:', testQuery)
 
     const { data: poll, error: pollError } = await supabase
-    .from('polls')
-    .insert({
-      title: title, // Changed from question to title
-      description,
-      user_id: user.id
-    })
-    .select()
-    .single()
+      .from('polls')
+      .insert({
+        title: title,
+        description,
+        user_id: user.id
+      })
+      .select()
+      .single()
 
     // Debug: Log the actual response
     console.log('Poll insert response:', { data: poll, error: pollError })
@@ -98,15 +98,59 @@ export async function createPoll({ title, description, options }: {
   }
 }
 
-export async function getAllPolls() {
-  const supabase = getSupabaseClient()
-  const { data, error } = await supabase
-    .from('polls')
-    .select(`*, options(*, votes_count:votes(count))`)
-    .order('created_at', { ascending: false })
+export async function getAllPolls(): Promise<Poll[]> {
+  const supabase = getSupabaseClient();
+  
+  try {
+    // Simple, direct query that avoids any profiles table issues
+    const { data, error } = await supabase
+      .from('polls')
+      .select(`
+        *,
+        options(
+          id,
+          text,
+          poll_id
+        )
+      `)
+      .eq('is_active', true)
+      .order('created_at', { ascending: false });
 
-  if (error) throw error
-  return data
+    if (error) {
+      console.error('Error fetching polls:', error.message);
+      return [];
+    }
+
+    if (!data || data.length === 0) {
+      return [];
+    }
+
+    // Get votes for these polls
+    const pollIds = data.map(p => p.id);
+    const { data: votes, error: votesError } = await supabase
+      .from('votes')
+      .select('option_id, poll_id')
+      .in('poll_id', pollIds);
+
+    // Count votes per option
+    const voteCounts = new Map();
+    votes?.forEach(vote => {
+      voteCounts.set(vote.option_id, (voteCounts.get(vote.option_id) || 0) + 1);
+    });
+
+    // Return polls with vote counts
+    return data.map(poll => ({
+      ...poll,
+      options: (poll.options || []).map(option => ({
+        ...option,
+        votes_count: voteCounts.get(option.id) || 0
+      }))
+    }));
+
+  } catch (error) {
+    console.error('Error in getAllPolls:', error instanceof Error ? error.message : String(error));
+    return [];
+  }
 }
 
 export async function getPolls() {
@@ -184,12 +228,115 @@ export async function getPollResults(pollId: string) {
 
 export async function getPollStatistics() {
   const supabase = getSupabaseClient()
-  const { data, error } = await supabase
-    .from('poll_statistics')
-    .select('*')
+  
+  try {
+    console.log('Starting getPollStatistics with direct queries...');
+    
+    // First, check if user is authenticated
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    if (!user) {
+      console.log('No authenticated user');
+      return {
+        total_polls: 0,
+        total_votes: 0,
+        average_votes: 0,
+        active_polls: 0,
+        inactive_polls: 0,
+        total_users: 0
+      };
+    }
 
-  if (error) throw error
-  return data
+    // Get all polls (try admin access first, fallback to active only)
+    let polls: any[] = [];
+    
+    const { data: allPolls, error: allError } = await supabase.from('polls').select('*');
+    
+    if (!allError && allPolls) {
+      polls = allPolls;
+    } else {
+      // Fallback to active polls only
+      const { data: activePolls, error: activeError } = await supabase
+        .from('polls')
+        .select('*')
+        .eq('is_active', true);
+      
+      if (activeError) {
+        console.error('Error fetching polls for stats:', activeError);
+        return {
+          total_polls: 0,
+          total_votes: 0,
+          average_votes: 0,
+          active_polls: 0,
+          inactive_polls: 0,
+          total_users: 0
+        };
+      }
+      
+      polls = activePolls || [];
+    }
+
+    // Get all votes
+    const { data: votes, error: votesError } = await supabase
+      .from('votes')
+      .select('*');
+
+    if (votesError) {
+      console.error('Error fetching votes for stats:', votesError);
+    }
+
+    // Get user count - use a safe approach
+    let totalUsers = 0;
+    try {
+      // Count distinct user IDs from polls and votes
+      const uniqueUserIds = new Set();
+      
+      // Add users from polls
+      polls.forEach(poll => {
+        if (poll.user_id) uniqueUserIds.add(poll.user_id);
+      });
+      
+      // Add users from votes
+      votes?.forEach(vote => {
+        if (vote.user_id) uniqueUserIds.add(vote.user_id);
+      });
+      
+      totalUsers = uniqueUserIds.size;
+    } catch (userCountError) {
+      console.error('Error counting users:', userCountError);
+      totalUsers = 0;
+    }
+
+    const totalPolls = polls?.length || 0;
+    const totalVotes = votes?.length || 0;
+    const activePolls = polls?.filter(p => p.is_active).length || 0;
+    const inactivePolls = totalPolls - activePolls;
+    const averageVotes = totalPolls > 0 ? totalVotes / totalPolls : 0;
+
+    return {
+      total_polls: totalPolls,
+      total_votes: totalVotes,
+      average_votes: parseFloat(averageVotes.toFixed(2)),
+      active_polls: activePolls,
+      inactive_polls: inactivePolls,
+      total_users: totalUsers
+    };
+
+  } catch (error) {
+    console.error('Critical error in getPollStatistics:', {
+      error: error,
+      message: error instanceof Error ? error.message : String(error)
+    });
+    
+    return {
+      total_polls: 0,
+      total_votes: 0,
+      average_votes: 0,
+      active_polls: 0,
+      inactive_polls: 0,
+      total_users: 0
+    };
+  }
 }
 
 export async function hasUserVoted(pollId: string, userId: string) {
@@ -234,13 +381,16 @@ export async function updatePoll(pollId: string, { title, description, options }
     }
 
     // Check if poll has any votes
-    const { data: voteCount } = await supabase
+    const { count: voteCount, error: voteCountError } = await supabase
       .from('votes')
-      .select('count')
+      .select('*', { count: 'exact', head: true })
       .eq('poll_id', pollId)
-      .single()
 
-    if (voteCount && voteCount.count > 0) {
+    if (voteCountError) {
+      throw new Error(`Failed to check votes: ${voteCountError.message}`)
+    }
+
+    if (voteCount && voteCount > 0) {
       throw new Error('Cannot edit a poll that already has votes')
     }
 
