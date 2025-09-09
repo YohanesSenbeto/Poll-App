@@ -39,7 +39,7 @@ export async function middleware(request: NextRequest) {
   const response = NextResponse.next()
   const supabase = createMiddlewareClient({ req: request, res: response })
 
-  // Only check admin status for admin routes
+  // Protect admin routes
   if (request.nextUrl.pathname.startsWith('/admin')) {
     const { data: { session } } = await supabase.auth.getSession()
 
@@ -53,9 +53,23 @@ export async function middleware(request: NextRequest) {
     }
   }
 
+  // Protect authenticated-only routes
+  const protectedRoutes = ['/profile', '/polls/create'];
+  const isProtectedRoute = protectedRoutes.some(route => 
+    request.nextUrl.pathname.startsWith(route)
+  );
+
+  if (isProtectedRoute) {
+    const { data: { session } } = await supabase.auth.getSession()
+    
+    if (!session) {
+      return NextResponse.redirect(new URL('/auth/login', request.url))
+    }
+  }
+
   return response
 }
 
 export const config = {
-  matcher: ['/admin/:path*'],
+  matcher: ['/admin/:path*', '/profile/:path*', '/polls/create/:path*'],
 }

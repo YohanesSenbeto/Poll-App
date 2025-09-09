@@ -22,8 +22,9 @@ import {
     Eye,
     Activity,
     TrendingUp,
-    AlertTriangle,
-    CheckCircle,
+    Code,
+    Database,
+    Calendar,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -38,6 +39,11 @@ interface Poll {
     creator_username: string;
     vote_count: number;
     option_count: number;
+    options: Array<{
+        id: string;
+        option_text: string;
+        votes_count: number;
+    }>;
 }
 
 interface User {
@@ -54,9 +60,19 @@ interface Analytics {
     total_polls: number;
     total_users: number;
     total_votes: number;
+    active_polls: number;
+    inactive_polls: number;
+    admin_users: number;
+    regular_users: number;
+    verified_users: number;
     active_poll_creators: number;
     latest_poll: string;
-    latest_vote: string;
+    trending_languages: Array<{ language_name: string; total_value: number }>;
+    language_mentions: Array<{ language_name: string; mention_count: number }>;
+    all_languages: Array<{ id: number; name: string; category: string }>;
+    daily_poll_stats: Array<{ date: string; total_value: number }>;
+    daily_vote_stats: Array<{ date: string; total_value: number }>;
+    recent_votes: Array<any>;
 }
 
 export default function AdminDashboard() {
@@ -65,90 +81,269 @@ export default function AdminDashboard() {
     const [users, setUsers] = useState<User[]>([]);
     const [analytics, setAnalytics] = useState<Analytics | null>(null);
     const [loading, setLoading] = useState(true);
-    const [selectedPoll, setSelectedPoll] = useState<string | null>(null);
-
-    useEffect(() => {
-        if (isAdmin) {
-            loadAdminData();
-        }
-    }, [isAdmin]);
 
     const loadAdminData = async () => {
         try {
-            // Load analytics
-            const { data: analyticsData } = await supabase
-                .from("admin_analytics")
+            // Get comprehensive analytics using new tables
+            const today = new Date().toISOString().split("T")[0];
+
+            // Basic counts with detailed breakdowns
+            const { count: totalPolls } = await supabase
+                .from("polls")
+                .select("*", { count: "exact", head: true });
+
+            const { count: totalUsers } = await supabase
+                .from("auth.users")
+                .select("*", { count: "exact", head: true });
+
+            const { count: totalVotes } = await supabase
+                .from("votes")
+                .select("*", { count: "exact", head: true });
+
+            const { count: activePolls } = await supabase
+                .from("polls")
+                .select("*", { count: "exact", head: true })
+                .eq("is_active", true);
+
+            const { count: inactivePolls } = await supabase
+                .from("polls")
+                .select("*", { count: "exact", head: true })
+                .eq("is_active", false);
+
+            // User breakdowns - use auth.users for counts
+            const { count: adminUsers } = await supabase
+                .from("auth.users")
+                .select("*", { count: "exact", head: true })
+                .eq("role", "admin");
+
+            const { count: regularUsers } = await supabase
+                .from("auth.users")
+                .select("*", { count: "exact", head: true })
+                .eq("role", "user");
+
+            // Count verified users (email confirmed)
+            const { count: verifiedUsers } = await supabase
+                .from("auth.users")
+                .select("*", { count: "exact", head: true })
+                .not("email_confirmed_at", "is", null);
+
+            // Poll creators and engagement
+            const { data: activeCreators } = await supabase
+                .from("polls")
+                .select("user_id")
+                .not("user_id", "is", null);
+            const activePollCreators = new Set(
+                activeCreators?.map((p) => p.user_id)
+            ).size;
+
+            // Language analytics
+            const { data: trendingLanguages } = await supabase
+                .from("daily_analytics")
+                .select("language_name, total_value")
+                .eq("metric_type", "poll_creation")
+                .order("total_value", { ascending: false })
+                .limit(10);
+
+            const { data: languageMentions } = await supabase
+                .from("language_mentions")
+                .select("language_name, mention_count")
+                .order("mention_count", { ascending: false })
+                .limit(15);
+
+            const { data: allLanguages } = await supabase
+                .from("common_programming_languages")
                 .select("*")
-                .single();
+                .order("name");
 
-            if (analyticsData) {
-                setAnalytics(analyticsData);
-            }
+            // Daily stats with both polls and votes
+            const { data: dailyPollStats } = await supabase
+                .from("daily_analytics")
+                .select("date, total_value")
+                .eq("metric_type", "poll_creation")
+                .order("date", { ascending: false })
+                .limit(14);
 
-            // Load all polls with user details
-            const { data: pollsData } = await supabase
-                .from("user_polls_detailed")
-                .select("*")
-                .order("created_at", { ascending: false });
+            const { data: dailyVoteStats } = await supabase
+                .from("daily_analytics")
+                .select("date, total_value")
+                .eq("metric_type", "votes_cast")
+                .order("date", { ascending: false })
+                .limit(14);
 
-            if (pollsData) {
-                setPolls(pollsData);
+            // Recent activity
+            const { data: recentPolls } = await supabase
+                .from("polls")
+                .select(
+                    `
+                    *,
+                    profiles:user_id (email, username, role),
+                    options (
+                        id,
+                        option_text,
+                        votes_count
+                    )
+                `
+                )
+                .order("created_at", { ascending: false })
+                .limit(50);
 
-                // Extract unique user information from polls
-                const userMap = new Map();
-                const userPollCounts = new Map();
-                const userVoteCounts = new Map();
+            const { data: recentVotes } = await supabase
+                .from("votes")
+                .select(
+                    `
+                    *,
+                    profiles:user_id (email, username),
+                    polls:poll_id (title, user_id)
+                `
+                )
+                .order("created_at", { ascending: false })
+                .limit(20);
 
-                // Count polls per user
-                pollsData.forEach((poll) => {
-                    if (poll.user_id) {
-                        userPollCounts.set(
-                            poll.user_id,
-                            (userPollCounts.get(poll.user_id) || 0) + 1
-                        );
+            // User statistics - handle missing profiles table
+            let allUsers = [];
+            let usersWithStats = [];
 
-                        if (!userMap.has(poll.user_id)) {
-                            userMap.set(poll.user_id, {
-                                id: poll.user_id,
-                                email: poll.creator_email || "Unknown",
-                                username:
-                                    poll.creator_username ||
-                                    poll.creator_email?.split("@")[0] ||
-                                    "user",
-                                created_at: poll.created_at,
-                                role: poll.creator_role || "user",
-                            });
-                        }
-                    }
-                });
+            try {
+                // Try to fetch users with the new RLS policy
+                const { data: authUsers, error: authError } = await supabase
+                    .from("auth.users")
+                    .select("id, email, created_at, email_confirmed_at")
+                    .order("created_at", { ascending: false });
 
-                // Get vote counts per user (separate query)
-                const { data: votesData } = await supabase
-                    .from("votes")
-                    .select("user_id");
+                if (authError) {
+                    console.warn(
+                        "Cannot access auth.users, using fallback:",
+                        authError.message
+                    );
 
-                if (votesData) {
-                    votesData.forEach((vote) => {
-                        if (vote.user_id) {
-                            userVoteCounts.set(
-                                vote.user_id,
-                                (userVoteCounts.get(vote.user_id) || 0) + 1
-                            );
+                    // Fallback: reconstruct users from polls and votes
+                    const { data: pollUsers } = await supabase
+                        .from("polls")
+                        .select("user_id, created_at")
+                        .not("user_id", "is", null);
+
+                    const { data: voteUsers } = await supabase
+                        .from("votes")
+                        .select("user_id, created_at")
+                        .not("user_id", "is", null);
+
+                    const userSet = new Set();
+                    const userTimestamps = new Map();
+
+                    pollUsers?.forEach((poll) => {
+                        if (poll.user_id) {
+                            userSet.add(poll.user_id);
+                            userTimestamps.set(poll.user_id, poll.created_at);
                         }
                     });
+
+                    voteUsers?.forEach((vote) => {
+                        if (vote.user_id) {
+                            userSet.add(vote.user_id);
+                            userTimestamps.set(vote.user_id, vote.created_at);
+                        }
+                    });
+
+                    allUsers = Array.from(userSet).map((userId) => ({
+                        id: userId,
+                        email: `${userId.slice(0, 8)}@user.com`,
+                        username: `user_${userId.slice(0, 8)}`,
+                        role: "user",
+                        created_at:
+                            userTimestamps.get(userId) ||
+                            new Date().toISOString(),
+                        email_confirmed: false,
+                    }));
+                } else {
+                    // Successfully fetched from auth.users
+                    allUsers = authUsers.map((user) => ({
+                        id: user.id,
+                        email: user.email || "Unknown",
+                        username: user.email?.split("@")[0] || "user",
+                        role: "user",
+                        created_at: user.created_at,
+                        email_confirmed: !!user.email_confirmed_at,
+                    }));
                 }
 
-                // Combine user data with counts
-                const usersWithStats = Array.from(userMap.values()).map(
-                    (user) => ({
-                        ...user,
-                        polls_count: userPollCounts.get(user.id) || 0,
-                        votes_count: userVoteCounts.get(user.id) || 0,
+                // Get user statistics
+                usersWithStats = await Promise.all(
+                    allUsers.map(async (user) => {
+                        const { count: pollsCount } = await supabase
+                            .from("polls")
+                            .select("*", { count: "exact", head: true })
+                            .eq("user_id", user.id);
+
+                        const { count: votesCount } = await supabase
+                            .from("votes")
+                            .select("*", { count: "exact", head: true })
+                            .eq("user_id", user.id);
+
+                        return {
+                            ...user,
+                            polls_count: pollsCount || 0,
+                            votes_count: votesCount || 0,
+                        };
                     })
                 );
 
-                setUsers(usersWithStats);
+                // Sort by creation date
+                usersWithStats.sort(
+                    (a, b) =>
+                        new Date(b.created_at).getTime() -
+                        new Date(a.created_at).getTime()
+                );
+            } catch (error) {
+                console.error("Error loading users:", error);
+                usersWithStats = [];
             }
+
+            const enrichedPolls =
+                recentPolls?.map((poll) => ({
+                    id: poll.id,
+                    title: poll.title,
+                    description: poll.description,
+                    created_at: poll.created_at,
+                    user_id: poll.user_id,
+                    is_active: poll.is_active,
+                    creator_email: poll.profiles?.email || "Unknown",
+                    creator_username:
+                        poll.profiles?.username ||
+                        poll.profiles?.email?.split("@")[0] ||
+                        "user",
+                    creator_role: poll.profiles?.role || "user",
+                    vote_count:
+                        poll.options?.reduce(
+                            (sum: number, opt: any) =>
+                                sum + (opt.votes_count || 0),
+                            0
+                        ) || 0,
+                    option_count: poll.options?.length || 0,
+                    options: poll.options || [],
+                })) || [];
+
+            setPolls(enrichedPolls);
+            setUsers(usersWithStats);
+
+            setAnalytics({
+                total_polls: totalPolls || 0,
+                total_users: totalUsers || 0,
+                total_votes: totalVotes || 0,
+                active_polls: activePolls || 0,
+                inactive_polls: inactivePolls || 0,
+                admin_users: adminUsers || 0,
+                regular_users: regularUsers || 0,
+                verified_users: verifiedUsers || 0,
+                active_poll_creators: activePollCreators,
+                trending_languages: trendingLanguages || [],
+                language_mentions: languageMentions || [],
+                all_languages: allLanguages || [],
+                daily_poll_stats: dailyPollStats || [],
+                daily_vote_stats: dailyVoteStats || [],
+                recent_votes: recentVotes || [],
+                latest_poll:
+                    enrichedPolls[0]?.created_at || new Date().toISOString(),
+            });
         } catch (error) {
             console.error("Error loading admin data:", error);
         } finally {
@@ -163,14 +358,12 @@ export default function AdminDashboard() {
             )
         ) {
             try {
-                // First delete votes and options (to maintain referential integrity)
+                const { deletePoll } = await import("@/lib/database");
+
                 await supabase.from("votes").delete().eq("poll_id", pollId);
                 await supabase.from("options").delete().eq("poll_id", pollId);
+                await deletePoll(pollId, true);
 
-                // Then delete the poll
-                await supabase.from("polls").delete().eq("id", pollId);
-
-                // Log admin action
                 await supabase.from("admin_actions").insert({
                     admin_id: user?.id,
                     action_type: "delete_poll",
@@ -179,54 +372,37 @@ export default function AdminDashboard() {
                     action_details: { reason: "Admin deletion" },
                 });
 
-                // Reload data
                 loadAdminData();
             } catch (error) {
                 console.error("Error deleting poll:", error);
-            }
-        }
-    };
-
-    const handleChangeUserRole = async (userId: string, newRole: string) => {
-        try {
-            // Use the promote_user_to_admin function for role changes
-            if (newRole === "admin") {
-                const { error } = await supabase.rpc("promote_user_to_admin", {
-                    target_user_id: userId,
-                });
-
-                if (error) {
-                    console.error("Error promoting user:", error);
-                    alert(
-                        "Error promoting user to admin. You may not have sufficient permissions."
-                    );
-                } else {
-                    alert("User promoted to admin successfully!");
-                    loadAdminData();
-                }
-            } else {
                 alert(
-                    "Only admin role changes are currently supported. For other role changes, please use the database directly."
+                    "Failed to delete poll: " +
+                        (error instanceof Error
+                            ? error.message
+                            : "Unknown error")
                 );
             }
-        } catch (error) {
-            console.error("Error changing user role:", error);
-            alert("Error changing user role.");
         }
     };
+
+    useEffect(() => {
+        if (isAdmin) {
+            loadAdminData();
+        }
+    }, [isAdmin]);
 
     if (!isAdmin) {
         return (
             <div className="container mx-auto p-8">
-                <Card className="max-w-md mx-auto">
+                <Card className="max-w-md mx-auto bg-slate-800 border-slate-700">
                     <CardHeader>
-                        <CardTitle className="text-red-600 flex items-center gap-2">
+                        <CardTitle className="text-red-400 flex items-center gap-2">
                             <Shield className="w-5 h-5" />
                             Access Denied
                         </CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <p className="text-muted-foreground">
+                        <p className="text-slate-400">
                             You do not have admin privileges to access this
                             dashboard.
                         </p>
@@ -249,19 +425,19 @@ export default function AdminDashboard() {
     return (
         <div className="container mx-auto p-3 sm:p-4 md:p-6 lg:p-8">
             <div className="mb-8">
-                <h1 className="text-3xl font-bold mb-2 flex items-center gap-3">
-                    <Shield className="w-8 h-8 text-primary" />
+                <h1 className="text-3xl font-bold mb-2 flex items-center gap-3 text-slate-100">
+                    <Shield className="w-8 h-8 text-blue-400" />
                     Admin Dashboard
                 </h1>
-                <p className="text-muted-foreground">
-                    Complete system overview and management panel
+                <p className="text-slate-400">
+                    Complete system overview with programming language insights
                 </p>
             </div>
 
-            {/* Analytics Cards */}
+            {/* Main Analytics */}
             {analytics && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6 sm:mb-8">
-                    <Card className="bg-slate-800/50 border-slate-700">
+                    <Card className="bg-slate-800 border-slate-700">
                         <CardHeader className="pb-2 sm:pb-3">
                             <CardTitle className="text-xs sm:text-sm font-medium flex items-center gap-2 text-slate-200">
                                 <BarChart3 className="w-3 h-3 sm:w-4 sm:h-4" />
@@ -273,16 +449,12 @@ export default function AdminDashboard() {
                                 {analytics.total_polls}
                             </div>
                             <p className="text-xs text-slate-400">
-                                Latest:{" "}
-                                {format(
-                                    new Date(analytics.latest_poll),
-                                    "MMM d, yyyy"
-                                )}
+                                Active polls in system
                             </p>
                         </CardContent>
                     </Card>
 
-                    <Card className="bg-slate-800/50 border-slate-700">
+                    <Card className="bg-slate-800 border-slate-700">
                         <CardHeader className="pb-2 sm:pb-3">
                             <CardTitle className="text-xs sm:text-sm font-medium flex items-center gap-2 text-slate-200">
                                 <Users className="w-3 h-3 sm:w-4 sm:h-4" />
@@ -299,7 +471,7 @@ export default function AdminDashboard() {
                         </CardContent>
                     </Card>
 
-                    <Card className="bg-slate-800/50 border-slate-700">
+                    <Card className="bg-slate-800 border-slate-700">
                         <CardHeader className="pb-2 sm:pb-3">
                             <CardTitle className="text-xs sm:text-sm font-medium flex items-center gap-2 text-slate-200">
                                 <Activity className="w-3 h-3 sm:w-4 sm:h-4" />
@@ -311,16 +483,12 @@ export default function AdminDashboard() {
                                 {analytics.total_votes}
                             </div>
                             <p className="text-xs text-slate-400">
-                                Latest:{" "}
-                                {format(
-                                    new Date(analytics.latest_vote),
-                                    "MMM d, yyyy"
-                                )}
+                                Across all polls
                             </p>
                         </CardContent>
                     </Card>
 
-                    <Card className="bg-slate-800/50 border-slate-700">
+                    <Card className="bg-slate-800 border-slate-700">
                         <CardHeader className="pb-2 sm:pb-3">
                             <CardTitle className="text-xs sm:text-sm font-medium flex items-center gap-2 text-slate-200">
                                 <TrendingUp className="w-3 h-3 sm:w-4 sm:h-4" />
@@ -344,6 +512,104 @@ export default function AdminDashboard() {
                 </div>
             )}
 
+            {/* Programming Language Analytics */}
+            {analytics && (
+                <div className="grid gap-6 md:grid-cols-2 mb-6 sm:mb-8">
+                    <Card className="bg-slate-800 border-slate-700">
+                        <CardHeader>
+                            <CardTitle className="text-lg flex items-center gap-2 text-slate-100">
+                                <Code className="w-5 h-5 text-blue-400" />
+                                Trending Languages
+                            </CardTitle>
+                            <CardDescription className="text-slate-400">
+                                Most popular programming languages in polls
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            {analytics.trending_languages &&
+                            analytics.trending_languages.length > 0 ? (
+                                <div className="space-y-3">
+                                    {analytics.trending_languages.map(
+                                        (lang, index) => (
+                                            <div
+                                                key={lang.language_name}
+                                                className="flex items-center justify-between"
+                                            >
+                                                <div className="flex items-center space-x-2">
+                                                    <span className="text-sm font-medium text-slate-300">
+                                                        {index + 1}.
+                                                    </span>
+                                                    <span className="text-sm text-slate-200">
+                                                        {lang.language_name}
+                                                    </span>
+                                                </div>
+                                                <Badge
+                                                    variant="secondary"
+                                                    className="text-xs"
+                                                >
+                                                    {lang.total_value} polls
+                                                </Badge>
+                                            </div>
+                                        )
+                                    )}
+                                </div>
+                            ) : (
+                                <p className="text-sm text-slate-400">
+                                    No language data available
+                                </p>
+                            )}
+                        </CardContent>
+                    </Card>
+
+                    <Card className="bg-slate-800 border-slate-700">
+                        <CardHeader>
+                            <CardTitle className="text-lg flex items-center gap-2 text-slate-100">
+                                <Database className="w-5 h-5 text-green-400" />
+                                Language Mentions
+                            </CardTitle>
+                            <CardDescription className="text-slate-400">
+                                Most mentioned programming languages
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            {analytics.language_mentions &&
+                            analytics.language_mentions.length > 0 ? (
+                                <div className="space-y-3">
+                                    {analytics.language_mentions
+                                        .slice(0, 5)
+                                        .map((lang, index) => (
+                                            <div
+                                                key={lang.language_name}
+                                                className="flex items-center justify-between"
+                                            >
+                                                <div className="flex items-center space-x-2">
+                                                    <span className="text-sm font-medium text-slate-300">
+                                                        {index + 1}.
+                                                    </span>
+                                                    <span className="text-sm text-slate-200">
+                                                        {lang.language_name}
+                                                    </span>
+                                                </div>
+                                                <Badge
+                                                    variant="outline"
+                                                    className="text-xs"
+                                                >
+                                                    {lang.mention_count}{" "}
+                                                    mentions
+                                                </Badge>
+                                            </div>
+                                        ))}
+                                </div>
+                            ) : (
+                                <p className="text-sm text-slate-400">
+                                    No mentions yet
+                                </p>
+                            )}
+                        </CardContent>
+                    </Card>
+                </div>
+            )}
+
             <Tabs defaultValue="polls" className="space-y-3 sm:space-y-4">
                 <TabsList className="w-full sm:w-auto grid grid-cols-3 sm:flex">
                     <TabsTrigger
@@ -361,22 +627,23 @@ export default function AdminDashboard() {
                         Users ({users.length})
                     </TabsTrigger>
                     <TabsTrigger
-                        value="actions"
+                        value="insights"
                         className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm"
                     >
                         <Activity className="w-3 h-3 sm:w-4 sm:h-4" />
-                        Actions
+                        Insights
                     </TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="polls">
-                    <Card className="bg-slate-800/50 border-slate-700">
+                    <Card className="bg-slate-800 border-slate-700">
                         <CardHeader>
                             <CardTitle className="text-slate-100">
                                 All Polls
                             </CardTitle>
                             <CardDescription className="text-slate-400">
-                                Complete list of all polls in the system
+                                Complete list of all polls in the system with
+                                real-time data
                             </CardDescription>
                         </CardHeader>
                         <CardContent>
@@ -384,7 +651,7 @@ export default function AdminDashboard() {
                                 {polls.map((poll) => (
                                     <div
                                         key={poll.id}
-                                        className="border border-slate-700 rounded-lg p-3 sm:p-4 bg-slate-800/30"
+                                        className="border border-slate-700 rounded-lg p-3 sm:p-4 bg-slate-900/50"
                                     >
                                         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3">
                                             <div className="flex-1 min-w-0">
@@ -398,7 +665,9 @@ export default function AdminDashboard() {
                                                     <span className="text-slate-300">
                                                         By:{" "}
                                                         <span className="text-slate-400 truncate">
-                                                            {poll.creator_email}
+                                                            {
+                                                                poll.creator_username
+                                                            }
                                                         </span>
                                                     </span>
                                                     <span className="text-slate-300">
@@ -453,13 +722,13 @@ export default function AdminDashboard() {
                 </TabsContent>
 
                 <TabsContent value="users">
-                    <Card className="bg-slate-800/50 border-slate-700">
+                    <Card className="bg-slate-800 border-slate-700">
                         <CardHeader>
                             <CardTitle className="text-slate-100">
                                 User Management
                             </CardTitle>
                             <CardDescription className="text-slate-400">
-                                Manage user roles and permissions
+                                Manage user roles and view activity statistics
                             </CardDescription>
                         </CardHeader>
                         <CardContent>
@@ -467,28 +736,26 @@ export default function AdminDashboard() {
                                 {users.map((user) => (
                                     <div
                                         key={user.id}
-                                        className="border border-slate-700 rounded-lg p-3 sm:p-4 bg-slate-800/30"
+                                        className="border border-slate-700 rounded-lg p-3 sm:p-4 bg-slate-900/50"
                                     >
                                         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
-                                            <div className="min-w-0">
+                                            <div className="flex-1 min-w-0">
                                                 <h3 className="font-semibold text-slate-100 text-sm sm:text-base">
-                                                    {user.email}
+                                                    {user.username}
                                                 </h3>
-                                                <p className="text-xs sm:text-sm text-slate-400">
-                                                    @{user.username} •{" "}
-                                                    <span className="capitalize">
-                                                        {user.role}
-                                                    </span>
+                                                <p className="text-xs sm:text-sm text-slate-400 truncate">
+                                                    {user.email}
                                                 </p>
                                                 <div className="flex flex-wrap gap-2 sm:gap-4 mt-1 text-xs sm:text-sm">
                                                     <span className="text-slate-300">
                                                         {user.polls_count} polls
+                                                        created
                                                     </span>
                                                     <span className="text-slate-300">
                                                         {user.votes_count} votes
+                                                        cast
                                                     </span>
                                                     <span className="text-slate-400">
-                                                        Joined:{" "}
                                                         {format(
                                                             new Date(
                                                                 user.created_at
@@ -498,27 +765,17 @@ export default function AdminDashboard() {
                                                     </span>
                                                 </div>
                                             </div>
-                                            <div className="flex gap-2 flex-shrink-0">
-                                                <select
-                                                    value={user.role}
-                                                    onChange={(e) =>
-                                                        handleChangeUserRole(
-                                                            user.id,
-                                                            e.target.value
-                                                        )
+                                            <div className="flex items-center gap-2">
+                                                <Badge
+                                                    variant={
+                                                        user.role === "admin"
+                                                            ? "default"
+                                                            : "secondary"
                                                     }
-                                                    className="border border-slate-600 rounded px-2 py-1 text-xs sm:text-sm bg-slate-700 text-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                                                    className="text-xs"
                                                 >
-                                                    <option value="user">
-                                                        User
-                                                    </option>
-                                                    <option value="moderator">
-                                                        Moderator
-                                                    </option>
-                                                    <option value="admin">
-                                                        Admin
-                                                    </option>
-                                                </select>
+                                                    {user.role}
+                                                </Badge>
                                             </div>
                                         </div>
                                     </div>
@@ -528,25 +785,116 @@ export default function AdminDashboard() {
                     </Card>
                 </TabsContent>
 
-                <TabsContent value="actions">
-                    <Card className="bg-slate-800/50 border-slate-700">
-                        <CardHeader>
-                            <CardTitle className="text-slate-100">
-                                Recent Admin Actions
-                            </CardTitle>
-                            <CardDescription className="text-slate-400">
-                                Track all administrative actions
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-center py-8">
-                                <Activity className="w-12 h-12 mx-auto mb-4 text-slate-400" />
-                                <p className="text-slate-400">
-                                    Admin action logging will appear here
-                                </p>
-                            </div>
-                        </CardContent>
-                    </Card>
+                <TabsContent value="insights">
+                    <div className="grid gap-6 md:grid-cols-2">
+                        <Card className="bg-slate-800 border-slate-700">
+                            <CardHeader>
+                                <CardTitle className="text-slate-100 flex items-center gap-2">
+                                    <Calendar className="w-5 h-5" />
+                                    Daily Activity
+                                </CardTitle>
+                                <CardDescription className="text-slate-400">
+                                    Poll creation trends over the last 7 days
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                {analytics?.daily_poll_stats &&
+                                analytics.daily_poll_stats.length > 0 ? (
+                                    <div className="space-y-2">
+                                        {analytics.daily_poll_stats.map(
+                                            (stat) => (
+                                                <div
+                                                    key={stat.date}
+                                                    className="flex justify-between items-center"
+                                                >
+                                                    <span className="text-sm text-slate-300">
+                                                        {format(
+                                                            new Date(stat.date),
+                                                            "MMM d"
+                                                        )}
+                                                    </span>
+                                                    <Badge
+                                                        variant="outline"
+                                                        className="text-xs"
+                                                    >
+                                                        {stat.total_value} polls
+                                                    </Badge>
+                                                </div>
+                                            )
+                                        )}
+                                    </div>
+                                ) : (
+                                    <p className="text-sm text-slate-400">
+                                        No daily data available
+                                    </p>
+                                )}
+                            </CardContent>
+                        </Card>
+
+                        <Card className="bg-slate-800 border-slate-700">
+                            <CardHeader>
+                                <CardTitle className="text-slate-100 flex items-center gap-2">
+                                    <TrendingUp className="w-5 h-5" />
+                                    System Health
+                                </CardTitle>
+                                <CardDescription className="text-slate-400">
+                                    Key performance indicators
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="space-y-3">
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-sm text-slate-300">
+                                            User Engagement Rate
+                                        </span>
+                                        <Badge
+                                            variant="default"
+                                            className="text-xs"
+                                        >
+                                            {analytics &&
+                                            analytics.total_users > 0
+                                                ? Math.round(
+                                                      (analytics.active_poll_creators /
+                                                          analytics.total_users) *
+                                                          100
+                                                  )
+                                                : 0}
+                                            %
+                                        </Badge>
+                                    </div>
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-sm text-slate-300">
+                                            Average Votes per Poll
+                                        </span>
+                                        <Badge
+                                            variant="secondary"
+                                            className="text-xs"
+                                        >
+                                            {analytics &&
+                                            analytics.total_polls > 0
+                                                ? Math.round(
+                                                      analytics.total_votes /
+                                                          analytics.total_polls
+                                                  )
+                                                : 0}
+                                        </Badge>
+                                    </div>
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-sm text-slate-300">
+                                            Active Languages
+                                        </span>
+                                        <Badge
+                                            variant="outline"
+                                            className="text-xs"
+                                        >
+                                            {analytics?.trending_languages
+                                                ?.length || 0}
+                                        </Badge>
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </div>
                 </TabsContent>
             </Tabs>
         </div>

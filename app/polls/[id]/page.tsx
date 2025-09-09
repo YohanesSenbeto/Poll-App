@@ -48,7 +48,7 @@ function PollView() {
                 if (currentUser) {
                     const voted = await hasUserVoted(pollId, currentUser.id);
                     setUserVoted(voted);
-                    
+
                     // Check if current user is the owner
                     if (pollData && pollData.user_id === currentUser.id) {
                         setIsOwner(true);
@@ -85,9 +85,37 @@ function PollView() {
             setResults(updatedResults);
             setUserVoted(voted);
             setSelectedOption("");
-        } catch (error) {
+        } catch (error: any) {
             console.error("Error voting:", error);
-            alert("Failed to submit vote. Please try again.");
+            
+            // Better error handling for duplicate votes
+            if (error.message?.includes("already voted")) {
+                notificationManager.addNotification({
+                    type: "warning",
+                    title: "Already Voted",
+                    message: `You have already voted on this poll with your email (${user?.email}). You can only vote once per poll.`,
+                    duration: 5000,
+                });
+                
+                // Refresh to show current results
+                const [updatedPoll, updatedResults, voted] = await Promise.all([
+                    getPollById(pollId),
+                    getPollResults(pollId),
+                    hasUserVoted(pollId, user.id),
+                ]);
+                
+                setPoll(updatedPoll);
+                setResults(updatedResults);
+                setUserVoted(voted);
+                
+            } else {
+                notificationManager.addNotification({
+                    type: "error",
+                    title: "Vote Failed",
+                    message: error.message || "Failed to submit vote. Please try again.",
+                    duration: 5000,
+                });
+            }
         } finally {
             setVoting(false);
         }
@@ -148,7 +176,17 @@ function PollView() {
                                     Voted
                                 </span>
                             )}
-                            {isOwner && totalVotes === 0 && (
+                            // Change this line (around line 150-160):
+                            {isOwner && (
+                                <Button asChild variant="outline" size="sm">
+                                    <Link href={`/polls/${pollId}/edit`}>
+                                        <Edit className="h-4 w-4 mr-1" />
+                                        Edit
+                                    </Link>
+                                </Button>
+                            )}
+                            // To this (allow editing always for owner):
+                            {isOwner && (
                                 <Button asChild variant="outline" size="sm">
                                     <Link href={`/polls/${pollId}/edit`}>
                                         <Edit className="h-4 w-4 mr-1" />

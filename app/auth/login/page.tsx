@@ -14,6 +14,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { loginSchema, type LoginInput } from "@/lib/schemas/auth.schema";
 import { notificationManager } from "@/lib/utils/notifications";
+import LoadingSpinner from "@/components/loading-spinner";
 
 const LoginPage = () => {
     const router = useRouter();
@@ -37,7 +38,13 @@ const LoginPage = () => {
         setFieldErrors({});
 
         try {
-            const validatedData = loginSchema.parse(formData);
+            // Trim inputs to prevent whitespace-related issues
+            const trimmedData = {
+                email: formData.email.trim(),
+                password: formData.password
+            };
+            
+            const validatedData = loginSchema.parse(trimmedData);
             await signIn(validatedData.email, validatedData.password);
 
             // Use addNotification with proper parameters
@@ -48,25 +55,38 @@ const LoginPage = () => {
                 duration: 5000,
             });
 
+            // Validate and sanitize redirect URL to prevent open redirect vulnerabilities
             const searchParams = new URLSearchParams(window.location.search);
-            const redirectTo = searchParams.get("redirectTo") || "/polls";
+            let redirectTo = searchParams.get("redirectTo") || "/polls";
+            
+            // Ensure redirect URL is relative to prevent open redirect attacks
+            if (redirectTo.startsWith("//") || redirectTo.includes(":")) {
+                redirectTo = "/polls"; // Default safe path
+            }
 
             router.push(redirectTo);
         } catch (error: any) {
             if (error.errors) {
+                // Handle Zod validation errors
                 const errors: Record<string, string> = {};
                 error.errors.forEach((err: any) => {
-                    errors[err.path[0]] = err.message;
+                    if (err.path && err.path[0]) {
+                        errors[err.path[0]] = err.message;
+                    }
                 });
                 setFieldErrors(errors);
             } else {
                 // Use addNotification with proper parameters
+                // Don't expose detailed error messages to users
                 notificationManager.addNotification({
                     type: "error",
                     title: "Login Failed",
-                    message: error.message || "Failed to sign in",
+                    message: "Invalid email or password. Please try again.",
                     duration: 5000,
                 });
+                
+                // Log actual error for debugging (but not to the user)
+                console.error("Login error:", error);
             }
         } finally {
             setLoading(false);
@@ -141,7 +161,7 @@ const LoginPage = () => {
                         >
                             {loading ? (
                                 <div className="flex items-center justify-center">
-                                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                                    <LoadingSpinner size="sm" className="border-white mr-2" />
                                     Signing In...
                                 </div>
                             ) : (

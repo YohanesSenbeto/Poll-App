@@ -1,5 +1,5 @@
 import { Geist, Geist_Mono } from "next/font/google";
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { AuthProvider } from "./auth-context";
 import { Navbar } from "@/app/navbar";
@@ -20,7 +20,12 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
     title: "Poll App",
     description: "Create and vote on polls",
-    viewport: "width=device-width, initial-scale=1, maximum-scale=5",
+};
+
+export const viewport: Viewport = {
+    width: "device-width",
+    initialScale: 1,
+    maximumScale: 5,
 };
 
 export default function RootLayout({
@@ -29,7 +34,7 @@ export default function RootLayout({
     children: React.ReactNode;
 }>) {
     return (
-        <html lang="en" suppressHydrationWarning>
+        <html lang="en" data-scroll-behavior="smooth" suppressHydrationWarning>
             <body
                 className={`${geistSans.variable} ${geistMono.variable} antialiased overflow-x-hidden`}
             >

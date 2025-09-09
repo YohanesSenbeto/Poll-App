@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { LogOut, PlusCircle, BarChart3, Menu, X, Shield } from "lucide-react";
+import { LogOut, PlusCircle, BarChart3, Menu, X, Shield, Users, MessageSquare } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "@/app/auth-context";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -25,7 +25,7 @@ export function Navbar() {
         try {
             await signOut();
         } catch (error) {
-            console.error('Error signing out:', error);
+            console.error("Error signing out:", error);
         }
     };
 
@@ -41,37 +41,55 @@ export function Navbar() {
                             className="flex items-center space-x-1 sm:space-x-2"
                         >
                             <PollLogo className="h-6 w-6 sm:h-8 sm:w-8" />
-                            <span className="text-base sm:text-lg md:text-xl font-bold text-primary">Poll App</span>
+                            <span className="text-base sm:text-lg md:text-xl font-bold text-primary">
+                                Poll App
+                            </span>
                         </Link>
                         <div className="hidden md:flex items-center space-x-6">
-                            <Link
-                                href="/polls"
-                                className="text-sm font-medium text-foreground/70 hover:text-foreground transition-colors"
-                            >
-                                <BarChart3 className="inline-block w-4 h-4 mr-1" />
-                                Browse Polls
-                            </Link>
-                            {user && (
-                                <>
-                                    <Link
-                                        href="/polls/create"
-                                        className="text-sm font-medium text-foreground/70 hover:text-foreground transition-colors"
-                                    >
-                                        <PlusCircle className="inline-block w-4 h-4 mr-1" />
-                                        Create Poll
-                                    </Link>
-                                    {isAdmin && (
+                        <Link
+                            href="/polls"
+                            className="text-sm font-medium text-foreground/70 hover:text-foreground transition-colors"
+                        >
+                            <BarChart3 className="inline-block w-4 h-4 mr-1" />
+                            Browse Polls
+                        </Link>
+                        {user && (
+                            <>
+                                <Link
+                                    href="/polls/create"
+                                    className="text-sm font-medium text-foreground/70 hover:text-foreground transition-colors"
+                                >
+                                    <PlusCircle className="inline-block w-4 h-4 mr-1" />
+                                    Create Poll
+                                </Link>
+                                {isAdmin && (
+                                    <>
                                         <Link
                                             href="/admin"
                                             className="text-sm font-medium text-foreground/70 hover:text-foreground transition-colors"
                                         >
                                             <Shield className="inline-block w-4 h-4 mr-1" />
-                                            Admin
+                                            Admin Dashboard
                                         </Link>
-                                    )}
-                                </>
-                            )}
-                        </div>
+                                        <Link
+                                            href="/admin/users"
+                                            className="text-sm font-medium text-foreground/70 hover:text-foreground transition-colors"
+                                        >
+                                            <Users className="inline-block w-4 h-4 mr-1" />
+                                            Users
+                                        </Link>
+                                        <Link
+                                            href="/admin/polls"
+                                            className="text-sm font-medium text-foreground/70 hover:text-foreground transition-colors"
+                                        >
+                                            <MessageSquare className="inline-block w-4 h-4 mr-1" />
+                                            All Polls
+                                        </Link>
+                                    </>
+                                )}
+                            </>
+                        )}
+                    </div>
                     </div>
                     <div className="flex items-center space-x-1">
                         <ThemeToggle />
@@ -119,11 +137,15 @@ export function Navbar() {
                                         <Link href="/polls">My Polls</Link>
                                     </DropdownMenuItem>
                                     <DropdownMenuItem asChild>
-                                        <Link href="/profile">Profile Settings</Link>
+                                        <Link href="/profile">
+                                            Profile Settings
+                                        </Link>
                                     </DropdownMenuItem>
                                     {isAdmin && (
                                         <DropdownMenuItem asChild>
-                                            <Link href="/admin">Admin Dashboard</Link>
+                                            <Link href="/admin">
+                                                Admin Dashboard
+                                            </Link>
                                         </DropdownMenuItem>
                                     )}
                                     <DropdownMenuSeparator />
@@ -142,27 +164,17 @@ export function Navbar() {
                                     <Link href="/auth/login">Login</Link>
                                 </Button>
                                 <Button asChild size="sm">
-                                    <Link href="/auth/register">
-                                        Register
-                                    </Link>
+                                    <Link href="/auth/register">Register</Link>
                                 </Button>
                             </div>
                         )}
                     </div>
                 </div>
-                
+
                 {/* Mobile Menu */}
                 {mobileMenuOpen && (
                     <div className="md:hidden border-t border-border">
                         <div className="px-2 py-3 space-y-2">
-                            <Link
-                                href="/polls"
-                                className="flex items-center text-sm font-medium text-foreground/70 hover:text-foreground transition-colors py-2"
-                                onClick={() => setMobileMenuOpen(false)}
-                            >
-                                <BarChart3 className="w-4 h-4 mr-2" />
-                                Browse Polls
-                            </Link>
                             {user && (
                                 <>
                                     <Link
@@ -177,7 +189,9 @@ export function Navbar() {
                                         <Link
                                             href="/admin"
                                             className="flex items-center text-sm font-medium text-foreground/70 hover:text-foreground transition-colors py-2"
-                                            onClick={() => setMobileMenuOpen(false)}
+                                            onClick={() =>
+                                                setMobileMenuOpen(false)
+                                            }
                                         >
                                             <Shield className="w-4 h-4 mr-2" />
                                             Admin
@@ -187,13 +201,30 @@ export function Navbar() {
                             )}
                             {!user && (
                                 <div className="space-y-3 pt-2 border-t border-border">
-                                    <Button variant="ghost" asChild className="w-full justify-start">
-                                        <Link href="/auth/login" onClick={() => setMobileMenuOpen(false)}>
+                                    <Button
+                                        variant="ghost"
+                                        asChild
+                                        className="w-full justify-start"
+                                    >
+                                        <Link
+                                            href="/auth/login"
+                                            onClick={() =>
+                                                setMobileMenuOpen(false)
+                                            }
+                                        >
                                             Login
                                         </Link>
                                     </Button>
-                                    <Button asChild className="w-full justify-start">
-                                        <Link href="/auth/register" onClick={() => setMobileMenuOpen(false)}>
+                                    <Button
+                                        asChild
+                                        className="w-full justify-start"
+                                    >
+                                        <Link
+                                            href="/auth/register"
+                                            onClick={() =>
+                                                setMobileMenuOpen(false)
+                                            }
+                                        >
                                             Register
                                         </Link>
                                     </Button>

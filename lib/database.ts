@@ -91,6 +91,79 @@ export async function createPoll({ title, description, options }: {
       throw new Error(`Failed to create options: ${optionsError.message}`)
     }
 
+    // Update analytics tables using new schema
+    try {
+      // Record poll creation in poll_analytics
+      const { error: analyticsError } = await supabase
+        .from('poll_analytics')
+        .insert({
+          metric_type: 'poll_created',
+          user_id: user.id,
+          poll_id: poll.id,
+          value: 1
+        });
+      
+      if (analyticsError) {
+        console.warn('Failed to record poll creation analytics:', analyticsError);
+      }
+
+      // Record language mentions
+      const programmingLanguages = [
+        'javascript', 'python', 'typescript', 'java', 'csharp', 'cpp', 'go', 
+        'rust', 'php', 'ruby', 'swift', 'kotlin', 'sql', 'html-css', 'react', 
+        'vue', 'angular', 'nodejs', 'django', 'flask', 'spring', 'laravel', 'express'
+      ];
+      
+      const lowerTitle = title.toLowerCase();
+      const lowerDescription = description?.toLowerCase() || '';
+      const mentionedLanguages: string[] = [];
+      
+      for (const lang of programmingLanguages) {
+        if (lowerTitle.includes(lang) || lowerDescription.includes(lang)) {
+          mentionedLanguages.push(lang);
+          
+          // Record language mention
+          const { error: langError } = await supabase
+            .from('poll_analytics')
+            .insert({
+              metric_type: 'language_mentioned',
+              language_name: lang,
+              user_id: user.id,
+              poll_id: poll.id,
+              value: 1
+            });
+          
+          if (langError) {
+            console.warn(`Failed to record language mention for ${lang}:`, langError);
+          }
+        }
+      }
+
+      // Use RPC function for daily analytics increment
+      const { error: dailyError } = await supabase.rpc('increment_daily_metrics', {
+        p_metric_type: 'poll_created'
+      });
+      
+      if (dailyError) {
+        console.warn('Failed to increment daily metrics:', dailyError);
+      }
+
+      // Increment language demand for each mentioned language
+      for (const lang of mentionedLanguages) {
+        const { error: langDemandError } = await supabase.rpc('increment_language_demand', {
+          p_language_name: lang
+        });
+        
+        if (langDemandError) {
+          console.warn(`Failed to increment language demand for ${lang}:`, langDemandError);
+        }
+      }
+
+    } catch (analyticsError) {
+      // Analytics errors should not prevent poll creation
+      console.warn('Analytics update failed:', analyticsError);
+    }
+
     return poll
   } catch (error) {
     console.error('Error in createPoll:', error)
@@ -98,57 +171,54 @@ export async function createPoll({ title, description, options }: {
   }
 }
 
-export async function getAllPolls(): Promise<Poll[]> {
+// Poll operations
+// Optimized getAllPolls function that works for all users
+export async function getAllPolls() {
   const supabase = getSupabaseClient();
   
   try {
-    // Simple, direct query that avoids any profiles table issues
-    const { data, error } = await supabase
+    console.log('Starting optimized getAllPolls...');
+    
+    // Single optimized query using joins - no auth required
+    const { data: pollsData, error: pollsError } = await supabase
       .from('polls')
       .select(`
         *,
-        options(
-          id,
-          text,
-          poll_id
-        )
+        options(*),
+        votes: votes(id, option_id)
       `)
-      .eq('is_active', true)
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .limit(50);
 
-    if (error) {
-      console.error('Error fetching polls:', error.message);
+    if (pollsError) {
+      console.error('Error fetching polls:', pollsError);
       return [];
     }
 
-    if (!data || data.length === 0) {
+    if (!pollsData || pollsData.length === 0) {
+      console.log('No polls found');
       return [];
     }
 
-    // Get votes for these polls
-    const pollIds = data.map(p => p.id);
-    const { data: votes, error: votesError } = await supabase
-      .from('votes')
-      .select('option_id, poll_id')
-      .in('poll_id', pollIds);
+    console.log(`Found ${pollsData.length} polls with optimized query`);
 
-    // Count votes per option
-    const voteCounts = new Map();
-    votes?.forEach(vote => {
-      voteCounts.set(vote.option_id, (voteCounts.get(vote.option_id) || 0) + 1);
+    // Process the data efficiently
+    const processedPolls = pollsData.map(poll => {
+      const optionsWithVotes = (poll.options || []).map(option => ({
+        ...option,
+        votes_count: (poll.votes || []).filter(vote => vote.option_id === option.id).length
+      }));
+
+      return {
+        ...poll,
+        options: optionsWithVotes
+      };
     });
 
-    // Return polls with vote counts
-    return data.map(poll => ({
-      ...poll,
-      options: (poll.options || []).map(option => ({
-        ...option,
-        votes_count: voteCounts.get(option.id) || 0
-      }))
-    }));
+    return processedPolls;
 
   } catch (error) {
-    console.error('Error in getAllPolls:', error instanceof Error ? error.message : String(error));
+    console.error('Error in optimized getAllPolls:', error instanceof Error ? error.message : String(error));
     return [];
   }
 }
@@ -214,6 +284,69 @@ export async function voteOnPoll(pollId: string, optionId: string) {
     })
 
   if (error) throw error
+
+  // Update analytics tables
+  try {
+    // Increment daily metrics
+    const today = new Date().toISOString().split('T')[0];
+    const { error: dailyError } = await supabase.rpc('increment_daily_metrics', {
+      p_date: today,
+      p_poll_count: 0,
+      p_vote_count: 1
+    });
+    
+    if (dailyError) {
+      console.warn('Failed to increment daily metrics:', dailyError);
+    }
+
+    // Get poll details to check for programming languages
+    const { data: poll } = await supabase
+      .from('polls')
+      .select('title, description')
+      .eq('id', pollId)
+      .single();
+
+    if (poll) {
+      const programmingLanguages = [
+        'javascript', 'python', 'typescript', 'java', 'csharp', 'cpp', 'c', 'go', 
+        'rust', 'php', 'ruby', 'swift', 'kotlin', 'scala', 'dart', 'r', 'sql'
+      ];
+      
+      const lowerTitle = poll.title.toLowerCase();
+      const lowerDescription = poll.description?.toLowerCase() || '';
+      
+      for (const lang of programmingLanguages) {
+        if (lowerTitle.includes(lang) || lowerDescription.includes(lang)) {
+          const { error: langError } = await supabase.rpc('increment_language_demand', {
+            p_language_name: lang,
+            p_poll_mention: 0,
+            p_vote_count: 1
+          });
+          
+          if (langError) {
+            console.warn(`Failed to increment language demand for ${lang}:`, langError);
+          }
+        }
+      }
+    }
+
+    // Record user session activity
+    const { error: sessionError } = await supabase.from('user_sessions').insert({
+      user_id: user.id,
+      session_type: 'vote_cast',
+      poll_id: pollId,
+      created_at: new Date().toISOString()
+    });
+    
+    if (sessionError) {
+      console.warn('Failed to record session activity:', sessionError);
+    }
+
+  } catch (analyticsError) {
+    // Analytics errors should not prevent voting
+    console.warn('Analytics update failed:', analyticsError);
+  }
+
   return true
 }
 
@@ -227,107 +360,37 @@ export async function getPollResults(pollId: string) {
 }
 
 export async function getPollStatistics() {
-  const supabase = getSupabaseClient()
+  const supabase = getSupabaseClient();
   
   try {
-    console.log('Starting getPollStatistics with direct queries...');
+    console.log('Starting optimized getPollStatistics...');
     
-    // First, check if user is authenticated
-    const { data: { user } } = await supabase.auth.getUser();
+    // Simple direct queries without auth requirement
+    const [pollsResult, votesResult, usersResult] = await Promise.all([
+      supabase.from('polls').select('id, is_active'),
+      supabase.from('votes').select('id'),
+      supabase.from('users').select('id').limit(1)
+    ]);
+
+    const polls = pollsResult.data || [];
+    const votes = votesResult.data || [];
     
-    if (!user) {
-      console.log('No authenticated user');
-      return {
-        total_polls: 0,
-        total_votes: 0,
-        average_votes: 0,
-        active_polls: 0,
-        inactive_polls: 0,
-        total_users: 0
-      };
-    }
-
-    // Get all polls (try admin access first, fallback to active only)
-    let polls: any[] = [];
-    
-    const { data: allPolls, error: allError } = await supabase.from('polls').select('*');
-    
-    if (!allError && allPolls) {
-      polls = allPolls;
-    } else {
-      // Fallback to active polls only
-      const { data: activePolls, error: activeError } = await supabase
-        .from('polls')
-        .select('*')
-        .eq('is_active', true);
-      
-      if (activeError) {
-        console.error('Error fetching polls for stats:', activeError);
-        return {
-          total_polls: 0,
-          total_votes: 0,
-          average_votes: 0,
-          active_polls: 0,
-          inactive_polls: 0,
-          total_users: 0
-        };
-      }
-      
-      polls = activePolls || [];
-    }
-
-    // Get all votes
-    const { data: votes, error: votesError } = await supabase
-      .from('votes')
-      .select('*');
-
-    if (votesError) {
-      console.error('Error fetching votes for stats:', votesError);
-    }
-
-    // Get user count - use a safe approach
-    let totalUsers = 0;
-    try {
-      // Count distinct user IDs from polls and votes
-      const uniqueUserIds = new Set();
-      
-      // Add users from polls
-      polls.forEach(poll => {
-        if (poll.user_id) uniqueUserIds.add(poll.user_id);
-      });
-      
-      // Add users from votes
-      votes?.forEach(vote => {
-        if (vote.user_id) uniqueUserIds.add(vote.user_id);
-      });
-      
-      totalUsers = uniqueUserIds.size;
-    } catch (userCountError) {
-      console.error('Error counting users:', userCountError);
-      totalUsers = 0;
-    }
-
-    const totalPolls = polls?.length || 0;
-    const totalVotes = votes?.length || 0;
-    const activePolls = polls?.filter(p => p.is_active).length || 0;
-    const inactivePolls = totalPolls - activePolls;
-    const averageVotes = totalPolls > 0 ? totalVotes / totalPolls : 0;
+    const activePolls = polls.filter(poll => poll.is_active).length;
+    const totalPolls = polls.length;
+    const totalVotes = votes.length;
+    const averageVotes = totalPolls > 0 ? Math.round(totalVotes / totalPolls) : 0;
 
     return {
       total_polls: totalPolls,
       total_votes: totalVotes,
-      average_votes: parseFloat(averageVotes.toFixed(2)),
+      average_votes: averageVotes,
       active_polls: activePolls,
-      inactive_polls: inactivePolls,
-      total_users: totalUsers
+      inactive_polls: totalPolls - activePolls,
+      total_users: 1 // Placeholder since we can't get accurate user count
     };
 
   } catch (error) {
-    console.error('Critical error in getPollStatistics:', {
-      error: error,
-      message: error instanceof Error ? error.message : String(error)
-    });
-    
+    console.error('Error in optimized getPollStatistics:', error instanceof Error ? error.message : String(error));
     return {
       total_polls: 0,
       total_votes: 0,
@@ -446,18 +509,31 @@ export async function updatePoll(pollId: string, { title, description, options }
 }
 
 // Delete operations
-export async function deletePoll(pollId: string) {
+export async function deletePoll(pollId: string, isAdmin = false) {
   const supabase = getSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('User not authenticated')
 
-  const { error } = await supabase
-    .from('polls')
-    .delete()
-    .eq('id', pollId)
-    .eq('user_id', user.id)
+  // Check if user is admin
+  if (!isAdmin) {
+    // Regular user can only delete their own polls
+    const { error } = await supabase
+      .from('polls')
+      .delete()
+      .eq('id', pollId)
+      .eq('user_id', user.id)
 
-  if (error) throw error
+    if (error) throw error
+  } else {
+    // Admin can delete any poll
+    const { error } = await supabase
+      .from('polls')
+      .delete()
+      .eq('id', pollId)
+
+    if (error) throw error
+  }
+  
   return true
 }
 

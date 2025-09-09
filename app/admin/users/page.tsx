@@ -21,9 +21,9 @@ import {
     Calendar,
     Trash2,
     UserPlus,
-    Users, // ← Add this import
-    MessageSquare, // ← Add this import
-    BarChart3, // ← Add this import
+    Users,
+    MessageSquare,
+    BarChart3,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -73,7 +73,7 @@ export default function AdminUsers() {
 
             const { data: allVotes } = await supabase
                 .from("votes")
-                .select("user_id");
+                .select("user_id, created_at");
 
             // Create user stats from polls and votes
             const userStats = new Map();
@@ -84,9 +84,17 @@ export default function AdminUsers() {
                         polls_count: 0,
                         votes_count: 0,
                         created_at: poll.created_at,
+                        last_activity: poll.created_at,
                         role: "user",
                     };
                     stats.polls_count += 1;
+                    // Update last_activity to the most recent activity
+                    if (
+                        new Date(poll.created_at) >
+                        new Date(stats.last_activity)
+                    ) {
+                        stats.last_activity = poll.created_at;
+                    }
                     userStats.set(poll.user_id, stats);
                 }
             });
@@ -96,22 +104,48 @@ export default function AdminUsers() {
                     const stats = userStats.get(vote.user_id) || {
                         polls_count: 0,
                         votes_count: 0,
+                        created_at: vote.created_at,
+                        last_activity: vote.created_at,
                         role: "user",
                     };
                     stats.votes_count += 1;
+                    // Update last_activity to the most recent activity
+                    if (
+                        new Date(vote.created_at) >
+                        new Date(stats.last_activity)
+                    ) {
+                        stats.last_activity = vote.created_at;
+                    }
                     userStats.set(vote.user_id, stats);
                 }
             });
 
-            // Convert to array format
+            // Get actual user emails from auth.users (if accessible)
+            let userEmails = new Map();
+            try {
+                const { data: authUsers } = await supabase
+                    .from("auth.users")
+                    .select("id, email, created_at");
+
+                authUsers?.forEach((user) => {
+                    userEmails.set(user.id, user.email);
+                });
+            } catch (error) {
+                console.log("Cannot access auth.users, using fallback data");
+            }
+
+            // Convert to array format with all required properties
             const usersWithCounts = Array.from(userStats.entries()).map(
                 ([user_id, stats]) => ({
                     id: user_id,
-                    email: "user@example.com",
-                    username: "",
+                    email: userEmails.get(user_id) || "unknown@example.com",
+                    username: `user_${user_id.slice(0, 8)}`,
                     polls_count: stats.polls_count,
                     votes_count: stats.votes_count,
                     created_at: stats.created_at || new Date().toISOString(),
+                    updated_at: stats.last_activity || new Date().toISOString(),
+                    last_activity:
+                        stats.last_activity || new Date().toISOString(),
                     role: stats.role,
                 })
             );
@@ -265,9 +299,22 @@ export default function AdminUsers() {
                                             <div className="flex items-center space-x-2">
                                                 <Calendar className="w-4 h-4" />
                                                 <span>
+                                                    Joined:{" "}
                                                     {format(
                                                         new Date(
                                                             user.created_at
+                                                        ),
+                                                        "MMM d, yyyy"
+                                                    )}
+                                                </span>
+                                            </div>
+                                            <div className="flex items-center space-x-2">
+                                                <Calendar className="w-4 h-4" />
+                                                <span>
+                                                    Active:{" "}
+                                                    {format(
+                                                        new Date(
+                                                            user.last_activity
                                                         ),
                                                         "MMM d, yyyy"
                                                     )}

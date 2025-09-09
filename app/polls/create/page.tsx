@@ -2,108 +2,57 @@
 
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
+import { createPoll } from "@/lib/database";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { ProtectedRoute } from "@/components/protected-route";
-import { Trash2, Plus, AlertCircle, Loader2 } from "lucide-react";
-import { useAuth } from "@/app/auth-context";
-import Link from "next/link";
+import { AlertCircle } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+
 import {
     createPollSchema,
-    type CreatePollInput,
+    programmingLanguages,
 } from "@/lib/schemas/poll.schema";
 import { notificationManager } from "@/lib/utils/notifications";
+import { useAuth } from "@/app/auth-context";
+import { ProtectedRoute } from "@/components/protected-route";
 
 function CreatePollForm() {
-    const [title, setTitle] = useState(""); // Changed from question to title
-    const [description, setDescription] = useState("");
-    const [options, setOptions] = useState(["", ""]);
-    const [loading, setLoading] = useState(false);
+    const [title, setTitle] = useState<string>("");
+    const [description, setDescription] = useState<string>("");
+    const [selectedLanguages, setSelectedLanguages] = useState<string[]>([]);
+    const [loading, setLoading] = useState<boolean>(false);
     const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
     const { user } = useAuth();
     const router = useRouter();
     const searchParams = useSearchParams();
 
-    const addOption = () => {
-        if (options.length < 10) {
-            setOptions([...options, ""]);
-        }
-    };
-
-    const removeOption = (index: number) => {
-        if (options.length > 2) {
-            setOptions(options.filter((_, i) => i !== index));
-        }
-    };
-
-    const updateOption = (index: number, value: string) => {
-        const newOptions = [...options];
-        newOptions[index] = value;
-        setOptions(newOptions);
-    };
-
-    useEffect(() => {
-        const authRequired = searchParams.get("authRequired");
-        if (authRequired === "true" && !user) {
-            notificationManager.addNotification({
-                type: "warning",
-                title: "Authentication Required",
-                message: "Please register or login to create polls",
-                duration: 5000,
-            });
-        }
-
-        // Validate session on page load
-        const validateSession = async () => {
-            if (!user) return;
-
-            try {
-                const { createClientComponentClient } = await import(
-                    "@supabase/auth-helpers-nextjs"
-                );
-                const supabase = createClientComponentClient();
-                const {
-                    data: { session },
-                    error,
-                } = await supabase.auth.getSession();
-
-                if (error || !session) {
-                    console.warn("Session validation failed:", error);
-                    // Will be handled by the form submission logic
-                }
-            } catch (error) {
-                console.error("Session validation error:", error);
-            }
-        };
-
-        validateSession();
-    }, [searchParams, user]);
-
-    const validateForm = () => {
+    /* ------------------------------------------------------------------ */
+    /*                             Validation                             */
+    /* ------------------------------------------------------------------ */
+    const isValid = () => {
         try {
-            const pollData = {
-                title: title, // Using title
+            createPollSchema.parse({
+                title,
                 description,
-                options: options.filter((opt) => opt.trim()),
-            };
-
-            console.log("Validating data:", pollData);
-
-            createPollSchema.parse(pollData);
+                languages: selectedLanguages,
+            });
             setFieldErrors({});
             return true;
-        } catch (error: any) {
-            console.log("Validation error:", error);
-
-            if (error.errors) {
+        } catch (err: any) {
+            if (err.errors) {
                 const errors: Record<string, string> = {};
-                error.errors.forEach((err: any) => {
-                    const field = err.path[0];
-                    errors[field] = err.message;
-                    console.log(`Field error: ${field} - ${err.message}`);
+                err.errors.forEach((e: any) => {
+                    if (e.path[0] === "languages") {
+                        errors["languages"] = e.message;
+                    } else {
+                        errors[e.path[0]] = e.message;
+                    }
                 });
                 setFieldErrors(errors);
             }
@@ -111,10 +60,11 @@ function CreatePollForm() {
         }
     };
 
+    /* ------------------------------------------------------------------ */
+    /*                           Submit Handler                           */
+    /* ------------------------------------------------------------------ */
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-
-        const redirectTo = "/auth/login?redirectTo=/polls/create";
 
         if (!user) {
             notificationManager.addNotification({
@@ -123,125 +73,53 @@ function CreatePollForm() {
                 message: "Please login to create polls",
                 duration: 5000,
             });
-            router.push(redirectTo);
+            router.push("/auth/login?redirectTo=/polls/create");
             return;
         }
-
-        // Precompute sanitized values to avoid repeated work
-        const cleanedOptions = options.map((opt) => opt.trim()).filter(Boolean);
-        const payload = {
-            title: title.trim(),
-            description: description.trim() || null,
-            options: cleanedOptions,
-        };
-
-        console.log("Form data before validation:", {
-            title, // Using title (raw for pre-validation log)
-            description,
-            options: options.filter((opt) => opt.trim()),
-        });
-
-        if (!validateForm()) {
-            console.log("Form validation failed with errors:", fieldErrors);
+        if (selectedLanguages.length !== 4) {
             notificationManager.addNotification({
                 type: "error",
                 title: "Validation Error",
-                message:
-                    "Please fix the errors in the form. Check console for details.",
+                message: "Please select exactly 4 programming languages",
                 duration: 5000,
             });
             return;
         }
 
+        const payload = {
+            title: title.trim(),
+            description: description.trim() || null,
+            options: selectedLanguages,
+        };
+
         setLoading(true);
-
         try {
-            console.log("Creating poll with data:", payload);
-
-            // Parallelize dynamic imports for performance
-            const [
-                { createClientComponentClient },
-                { createPoll },
-            ] = await Promise.all([
-                import("@supabase/auth-helpers-nextjs"),
-                import("@/lib/database"),
-            ]);
-
-            // Double-check authentication before proceeding
-            const supabase = createClientComponentClient();
-            const {
-                data: { user: currentUser },
-                error: authCheckError,
-            } = await supabase.auth.getUser();
-
-            if (authCheckError || !currentUser) {
-                console.error("Authentication check failed:", authCheckError);
-                notificationManager.addNotification({
-                    type: "error",
-                    title: "Authentication Required",
-                    message:
-                        "Your session has expired. Please login again to continue.",
-                    duration: 8000,
-                });
-                router.push(redirectTo);
-                return;
-            }
-
+            // Create poll and navigate immediately
             const poll = await createPoll(payload);
 
-            if (poll) {
-                notificationManager.addNotification({
-                    type: "success",
-                    title: "Poll Created!",
-                    message: "Your poll has been created successfully",
-                    duration: 5000,
-                });
-                setTitle(""); // Reset title
-                setDescription("");
-                setOptions(["", ""]);
+            if (poll && poll.id) {
+                // Immediate navigation with prefetch
+                router.prefetch(`/polls/${poll.id}`);
                 router.push(`/polls/${poll.id}`);
+
+                // Show notification after navigation starts
+                setTimeout(() => {
+                    notificationManager.addNotification({
+                        type: "success",
+                        title: "Poll Created!",
+                        message: "Your poll has been created successfully",
+                        duration: 5000,
+                    });
+                }, 100);
             } else {
-                notificationManager.addNotification({
-                    type: "error",
-                    title: "Creation Failed",
-                    message: "Failed to create poll. Please try again.",
-                    duration: 5000,
-                });
+                throw new Error("Failed to create poll");
             }
-        } catch (error: any) {
-            console.error("Poll creation error:", error);
-
-            let errorMessage = "Failed to create poll. Please try again.";
-
-            if (error.message) {
-                errorMessage = error.message;
-            }
-
-            if (error.details) {
-                errorMessage += ` Details: ${error.details}`;
-            }
-
-            // Handle specific auth errors
-            if (
-                errorMessage.includes("Auth session missing") ||
-                errorMessage.includes("Authentication failed")
-            ) {
-                errorMessage =
-                    "Your session has expired. Please login again to continue.";
-                notificationManager.addNotification({
-                    type: "error",
-                    title: "Session Expired",
-                    message: errorMessage,
-                    duration: 8000,
-                });
-                router.push(redirectTo);
-                return;
-            }
-
+        } catch (err: any) {
+            console.error(err);
             notificationManager.addNotification({
                 type: "error",
                 title: "Error Creating Poll",
-                message: errorMessage,
+                message: err.message ?? "Unexpected error",
                 duration: 8000,
             });
         } finally {
@@ -249,38 +127,42 @@ function CreatePollForm() {
         }
     };
 
+    /* ------------------------------------------------------------------ */
+    /*                        Authentication Notice                       */
+    /* ------------------------------------------------------------------ */
+    useEffect(() => {
+        if (searchParams.get("authRequired") === "true" && !user) {
+            notificationManager.addNotification({
+                type: "warning",
+                title: "Authentication Required",
+                message: "Please register or login to create polls",
+                duration: 5000,
+            });
+        }
+    }, [searchParams, user]);
+
+    /* ------------------------------------------------------------------ */
+    /*                                 JSX                                */
+    /* ------------------------------------------------------------------ */
     return (
-        <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 py-8">
-            <Card className="border-2 shadow-lg bg-card max-w-2xl">
-                <CardHeader className="bg-gradient-to-r from-blue-50/50 dark:from-blue-900/20 to-purple-50/50 dark:to-purple-900/20 border-b">
-                    <CardTitle className="text-2xl bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-                        Create New Poll
-                    </CardTitle>
-                    <p className="text-sm text-muted-foreground mt-1">
-                        Design your poll with engaging questions and options
-                    </p>
+        <div className="max-w-7xl mx-auto px-4 py-8">
+            <Card className="max-w-2xl mx-auto border-2 shadow-lg">
+                <CardHeader>
+                    <CardTitle>Create New Poll</CardTitle>
                 </CardHeader>
-                <CardContent className="pt-6">
+                <CardContent>
                     {!user ? (
-                        <div className="text-left py-8">
-                            <div className="mb-4 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-                                <AlertCircle className="h-6 w-6 text-red-600 dark:text-red-400 mb-2" />
-                                <h3 className="text-lg font-semibold text-red-800 dark:text-red-300 mb-2">
-                                    Authentication Required
-                                </h3>
-                                <p className="text-red-700 dark:text-red-300 mb-4">
-                                    Please register or login to create polls and
-                                    engage with our community.
-                                </p>
-                            </div>
+                        <div className="py-8 text-center">
+                            <AlertCircle className="h-6 w-6 mx-auto mb-2 text-red-600" />
+                            <p className="mb-4">
+                                Please register or login to create polls.
+                            </p>
                             <div className="space-x-4">
                                 <Link href="/auth/login?redirectTo=/polls/create">
-                                    <Button variant="default" size="lg">
-                                        Sign In
-                                    </Button>
+                                    <Button>Sign In</Button>
                                 </Link>
                                 <Link href="/auth/register?redirectTo=/polls/create">
-                                    <Button variant="outline" size="lg">
+                                    <Button variant="outline">
                                         Create Account
                                     </Button>
                                 </Link>
@@ -288,143 +170,106 @@ function CreatePollForm() {
                         </div>
                     ) : (
                         <form onSubmit={handleSubmit} className="space-y-6">
-                            <div className="space-y-2">
-                                <label className="text-sm font-medium text-foreground">
-                                    Poll Title *
-                                </label>
+                            {/* Title */}
+                            <div className="space-y-1">
+                                <Label>Poll Title *</Label>
                                 <Input
-                                    placeholder="What's your favorite programming language?"
-                                    value={title} // Using title
-                                    onChange={(e) => setTitle(e.target.value)} // Using setTitle
-                                    className="text-lg border-input bg-background text-foreground focus:border-blue-500 focus:ring-blue-500"
-                                    disabled={loading}
+                                    value={title}
+                                    onChange={(e) => setTitle(e.target.value)}
+                                    placeholder="What's your favourite language?"
                                 />
                                 {fieldErrors.title && (
-                                    <p className="text-sm text-red-500 dark:text-red-400 mt-1">
+                                    <p className="text-sm text-red-600">
                                         {fieldErrors.title}
                                     </p>
                                 )}
                             </div>
 
-                            <div className="space-y-2">
-                                <label className="text-sm font-medium text-foreground">
-                                    Description *
-                                </label>
+                            {/* Description */}
+                            <div className="space-y-1">
+                                <Label>Description *</Label>
                                 <Textarea
-                                    placeholder="Add context or details about your poll..."
                                     value={description}
                                     onChange={(e) =>
                                         setDescription(e.target.value)
                                     }
+                                    placeholder="(optional) Provide more context for voters"
                                     rows={3}
-                                    className="border-input bg-background text-foreground focus:border-blue-500 focus:ring-blue-500"
-                                    disabled={loading}
                                 />
                                 {fieldErrors.description && (
-                                    <p className="text-sm text-red-500 dark:text-red-400 mt-1">
+                                    <p className="text-sm text-red-600">
                                         {fieldErrors.description}
                                     </p>
                                 )}
                             </div>
 
-                            <div className="space-y-4">
-                                <div className="flex items-center justify-between">
-                                    <label className="text-sm font-medium text-foreground">
-                                        Options *
-                                    </label>
-                                    <span className="text-xs text-muted-foreground">
-                                        {options.length}/10 options
-                                    </span>
-                                </div>
-
-                                {options.map((option, index) => (
-                                    <div
-                                        key={index}
-                                        className="flex gap-2 items-start"
-                                    >
-                                        <div className="flex-1 relative">
-                                            <Input
-                                                placeholder={`Option ${
-                                                    index + 1
-                                                }`}
-                                                value={option}
-                                                onChange={(e) =>
-                                                    updateOption(
-                                                        index,
-                                                        e.target.value
-                                                    )
-                                                }
-                                                className={`pl-8 border-input bg-background text-foreground focus:border-blue-500 focus:ring-blue-500 ${
-                                                    fieldErrors.options?.[index]
-                                                        ? "border-red-500"
-                                                        : ""
-                                                }`}
-                                                disabled={loading}
-                                            />
-                                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground font-medium">
-                                                {String.fromCharCode(
-                                                    65 + index
-                                                )}
-                                                .
-                                            </span>
-                                            {fieldErrors.options?.[index] && (
-                                                <p className="text-xs text-red-500 mt-1">
-                                                    {fieldErrors.options[index]}
-                                                </p>
-                                            )}
-                                        </div>
-                                        {options.length > 2 && (
-                                            <Button
-                                                type="button"
-                                                variant="ghost"
-                                                size="sm"
-                                                onClick={() =>
-                                                    removeOption(index)
-                                                }
-                                                className="hover:bg-red-100 hover:text-red-600 text-muted-foreground dark:hover:bg-red-900/20"
-                                                disabled={loading}
+                            {/* Language Checkboxes */}
+                            <div className="space-y-2">
+                                <Label>
+                                    Select exactly 4 programming languages *
+                                </Label>
+                                <div className="grid grid-cols-2 gap-2">
+                                    {programmingLanguages.map((lang) => {
+                                        const checked =
+                                            selectedLanguages.includes(lang);
+                                        return (
+                                            <div
+                                                key={lang}
+                                                className="flex items-center space-x-2"
                                             >
-                                                <Trash2 className="h-4 w-4" />
-                                            </Button>
-                                        )}
-                                    </div>
-                                ))}
-
-                                {fieldErrors.options &&
-                                    !Array.isArray(fieldErrors.options) && (
-                                        <p className="text-sm text-red-500 dark:text-red-400">
-                                            {fieldErrors.options}
-                                        </p>
-                                    )}
-
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    onClick={addOption}
-                                    disabled={options.length >= 10 || loading}
-                                    className="w-full bg-gradient-to-r from-blue-50 to-purple-50 hover:from-blue-100 hover:to-purple-100 dark:from-blue-900/20 dark:to-purple-900/20 dark:hover:from-blue-900/30 dark:hover:to-purple-900/30 border-dashed text-gray-600 dark:text-gray-300"
-                                >
-                                    <Plus className="h-4 w-4 mr-2" />
-                                    Add Another Option
-                                </Button>
+                                                <Checkbox
+                                                    id={lang}
+                                                    checked={checked}
+                                                    disabled={
+                                                        !checked &&
+                                                        selectedLanguages.length >=
+                                                            4
+                                                    }
+                                                    onCheckedChange={(val) => {
+                                                        setSelectedLanguages(
+                                                            (prev) => {
+                                                                if (val) {
+                                                                    return prev.length <
+                                                                        4
+                                                                        ? [
+                                                                              ...prev,
+                                                                              lang,
+                                                                          ]
+                                                                        : prev;
+                                                                }
+                                                                return prev.filter(
+                                                                    (l) =>
+                                                                        l !==
+                                                                        lang
+                                                                );
+                                                            }
+                                                        );
+                                                    }}
+                                                />
+                                                <Label
+                                                    htmlFor={lang}
+                                                    className="capitalize"
+                                                >
+                                                    {lang}
+                                                </Label>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                                {fieldErrors.languages && (
+                                    <p className="text-sm text-red-600">
+                                        {fieldErrors.languages}
+                                    </p>
+                                )}
                             </div>
 
                             <Button
                                 type="submit"
-                                className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-medium py-3"
-                                disabled={loading}
+                                disabled={
+                                    loading || selectedLanguages.length !== 4
+                                }
                             >
-                                {loading ? (
-                                    <>
-                                        <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                                        Creating Poll...
-                                    </>
-                                ) : (
-                                    <>
-                                        <Plus className="mr-2 h-5 w-5" />
-                                        Create Poll
-                                    </>
-                                )}
+                                {loading ? "Creating…" : "Create Poll"}
                             </Button>
                         </form>
                     )}

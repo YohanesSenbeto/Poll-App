@@ -111,24 +111,61 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }, [supabaseClient, checkUserRole]);
 
     const signIn = async (email: string, password: string) => {
-        const { error } = await supabaseClient.auth.signInWithPassword({
-            email,
-            password,
-        });
-        if (error) throw error;
+        try {
+            const { error } = await supabaseClient.auth.signInWithPassword({
+                email,
+                password,
+            });
+            if (error) {
+                console.error("Sign in error:", error.message);
+                throw error;
+            }
+        } catch (error: any) {
+            // Add more context to the error for better debugging
+            const enhancedError = new Error(
+                `Authentication failed: ${error.message || "Unknown error"}`
+            );
+            throw enhancedError;
+        }
     };
 
     const signUp = async (email: string, password: string) => {
-        const { error } = await supabaseClient.auth.signUp({
-            email,
-            password,
-        });
-        if (error) throw error;
+        try {
+            const { error } = await supabaseClient.auth.signUp({
+                email,
+                password,
+            });
+            if (error) {
+                console.error("Sign up error:", error.message);
+                throw error;
+            }
+        } catch (error: any) {
+            // Add more context to the error for better debugging
+            const enhancedError = new Error(
+                `Registration failed: ${error.message || "Unknown error"}`
+            );
+            throw enhancedError;
+        }
     };
 
     const signOut = async () => {
-        const { error } = await supabaseClient.auth.signOut();
-        if (error) throw error;
+        try {
+            const { error } = await supabaseClient.auth.signOut();
+            if (error) {
+                console.error("Sign out error:", error.message);
+                throw error;
+            }
+            // Redirect to login page after successful sign out
+            if (typeof window !== "undefined") {
+                window.location.href = "/auth/login";
+            }
+        } catch (error: any) {
+            // Add more context to the error for better debugging
+            const enhancedError = new Error(
+                `Sign out failed: ${error.message || "Unknown error"}`
+            );
+            throw enhancedError;
+        }
     };
 
     const isAdmin = userRole === "admin";
