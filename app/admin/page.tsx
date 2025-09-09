@@ -200,8 +200,8 @@ export default function AdminDashboard() {
                 .limit(20);
 
             // User statistics - handle missing profiles table
-            let allUsers = [];
-            let usersWithStats = [];
+            let allUsers: any[] = [];
+            let usersWithStats: User[] = [];
 
             try {
                 // Try to fetch users with the new RLS policy
@@ -244,7 +244,7 @@ export default function AdminDashboard() {
                         }
                     });
 
-                    allUsers = Array.from(userSet).map((userId) => ({
+                    allUsers = Array.from(userSet).map((userId: any) => ({
                         id: userId,
                         email: `${userId.slice(0, 8)}@user.com`,
                         username: `user_${userId.slice(0, 8)}`,

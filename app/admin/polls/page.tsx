@@ -4,17 +4,19 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 // Import the chart component directly - it will handle client-side rendering
 
+interface PollOption {
+    id: string;
+    text: string;
+    votes_count: number;
+}
+
 interface Poll {
     id: string;
     title: string;
     description: string | null;
     created_at: string;
     user_id: string;
-    options: {
-        id: string;
-        text: string;
-        votes_count: number;
-    }[];
+    options: PollOption[];
     profiles: {
         username: string;
     } | null;
@@ -70,7 +72,7 @@ export default async function AdminPollsPage() {
             (sum, poll) =>
                 sum +
                 (poll.options?.reduce(
-                    (optionSum, option) =>
+                    (optionSum: number, option: PollOption) =>
                         optionSum + (option.votes_count || 0),
                     0
                 ) || 0),
@@ -93,6 +95,12 @@ export default async function AdminPollsPage() {
         .from('options')
         .select('id, text, poll_id');
 
+    const { data: languageMentions } = await supabase
+        .from("language_mentions")
+        .select("language_name, mention_count")
+        .order("mention_count", { ascending: false })
+        .limit(15);
+
     const languageStats = programmingLanguages.map(lang => {
         let totalVotes = 0;
         let userVotes = new Set(); // Track unique users who voted for this language
@@ -105,20 +113,23 @@ export default async function AdminPollsPage() {
                 
                 // Track unique users
                 votesForOption.forEach(vote => {
-                    if (vote.profiles?.id) {
-                        userVotes.add(vote.profiles.id);
+                    if (vote.profiles?.[0]?.id) {
+                        userVotes.add(vote.profiles[0].id);
                     }
                 });
             }
         });
+
+        const mention = languageMentions?.find(m => m.language_name === lang);
         
         return {
             language: lang,
             votes: totalVotes,
             users: userVotes.size,
+            mentions: mention?.mention_count || 0,
             percentage: 0 // Will calculate after getting totals
         };
-    }).filter(lang => lang.votes > 0);
+    }).filter(lang => lang.votes > 0 || lang.mentions > 0);
 
     // Calculate progressive percentages
     const totalLanguageVotes = languageStats.reduce((sum, lang) => sum + lang.votes, 0);
@@ -139,7 +150,7 @@ export default async function AdminPollsPage() {
                     : poll.title,
             votes:
                 poll.options?.reduce(
-                    (sum, option) => sum + (option.votes_count || 0),
+                    (sum: number, option: PollOption) => sum + (option.votes_count || 0),
                     0
                 ) || 0,
             options: poll.options?.length || 0,
@@ -192,8 +203,8 @@ export default async function AdminPollsPage() {
                 <CardContent>
                     <div className="space-y-3">
                         {languageDemand.map((lang, index) => {
-                            const totalDemand = languageDemand.reduce((sum, l) => sum + l.demand, 0);
-                            const percentage = Math.round((lang.demand / totalDemand) * 100);
+                            const totalDemand = languageDemand.reduce((sum, l) => sum + l.votes, 0);
+                            const percentage = Math.round((lang.votes / totalDemand) * 100);
                             const colorIntensity = Math.max(20, 100 - (index * 8));
                             
                             return (
