@@ -36,7 +36,7 @@ This project uses [`next/font`](https://nextjs.org/docs/app/building-your-applic
 - **Charts:** Recharts 3.1.2 for data visualization  
 - **Testing:** Jest + React Testing Library  
 - **Authentication:** Supabase Auth with custom role management  
-- **Deployment:** Vercel or Netlify  
+- **Deployment:** Vercel  
 
 ## 🧠 AI Integration Strategy
 
