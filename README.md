@@ -20,12 +20,69 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## 🔖 Project Title & Description
+
+**poll-app** is a comprehensive polling platform that allows users to create, vote on, and discuss polls. We're extending the application with advanced features including user role management, real-time result visualizations, comment threads, email notifications, and comprehensive testing.
+
+- **For:** Community organizations, educators, teams, and anyone needing opinion gathering  
+- **Why it matters:** Provides accessible, real-time polling with advanced features and professional analytics
+
+## 🛠️ Tech Stack
+
+- **Framework:** Next.js 15.5.2 with App Router  
+- **Database:** Supabase PostgreSQL with Row Level Security  
+- **Language:** TypeScript for type safety  
+- **UI Library:** Radix UI components with Tailwind CSS  
+- **Charts:** Recharts 3.1.2 for data visualization  
+- **Testing:** Jest + React Testing Library  
+- **Authentication:** Supabase Auth with custom role management  
+- **Deployment:** Vercel or Netlify  
+
+## 🧠 AI Integration Strategy
+
+### Code Generation
+- Use Cursor IDE with project-specific rules (`.cursor/rules`) for context-aware code generation
+- AI-assisted component scaffolding for new features
+- Refactoring and optimization of existing codebase
+- Database schema migrations and query optimization
+
+### Testing
+- AI-generated unit tests for utilities (e.g., `lib/database.ts`, auth utilities)
+- Integration tests for voting flows, authentication, and real-time features
+- Test coverage analysis and gap identification
+- Prompt: "Generate Jest tests for this voting component with mock Supabase responses"
+
+### Documentation
+- AI-assisted README updates and maintenance
+- JSDoc generation for functions and components
+- Inline code comments for complex logic
+- Architecture decision records
+- Prompt: "Create comprehensive documentation for this API endpoint with examples"
+
+### Context-Aware Techniques
+- Use `#file` references to provide file context in prompts
+- Share project structure with AI for better understanding
+- Provide existing patterns and conventions in prompts
+- Use `@thread` to maintain conversation context across sessions
+- Feed error messages and stack traces for debugging assistance
+
+## 📅 Development Approach
+
+We're extending the existing poll-app with these features:
+1. Enhanced user role management (Admin, Moderator, User)
+2. Real-time poll result charts with Recharts
+3. Comment discussion threads on polls
+4. Mobile responsiveness and accessibility improvements
+5. Email notification system for poll events
+6. Comprehensive test suite implementation
+7. QR code generation for poll sharing
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:
 
--   [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
--   [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
+- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
 
 You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
 
@@ -89,6 +146,20 @@ This app now includes full Supabase authentication integration.
 -   **User State Management**: Real-time auth state across the app
 -   **Responsive Navbar**: Shows user info and logout when authenticated
 -   **Middleware Protection**: Server-side route protection
+
+## Extending poll-app: New Features & Project Structure
+
+**poll-app** is a comprehensive polling platform that allows users to create, vote on, and discuss polls. We're extending the application with advanced features including user role management, real-time result visualizations, comment threads, email notifications, and comprehensive testing.
+
+### 🚀 New Features Being Added
+
+- 🔒 Enhanced user role management (Admin, Moderator, User)
+- 📊 Real-time poll result charts using Recharts
+- 💬 Discussion threads and comments on polls
+- 📱 Improved mobile responsiveness and accessibility
+- 📦 Email notifications for poll events
+- 🧪 Comprehensive test suite with Jest & React Testing Library
+- 📷 QR code generation for easy poll sharing
 
 ### Project Structure
 
