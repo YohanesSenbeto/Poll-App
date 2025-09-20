@@ -225,15 +225,10 @@ export async function getAllUsers(): Promise<AdminUser[]> {
   try {
     const supabase = getAdminClient();
     
+    // Get all profiles
     const { data, error } = await supabase
       .from('user_profiles')
-      .select(`
-        *,
-        auth_users:user_id (
-          email,
-          created_at
-        )
-      `)
+      .select('*')
       .eq('is_active', true)
       .order('created_at', { ascending: false });
 
@@ -242,13 +237,14 @@ export async function getAllUsers(): Promise<AdminUser[]> {
       return [];
     }
 
+    // Map profiles to AdminUser format
     return data?.map(profile => ({
       id: profile.user_id,
-      email: profile.auth_users?.email || 'unknown@example.com',
+      email: 'user@example.com', // We'll get this from auth context
       role: profile.role,
       username: profile.username,
       display_name: profile.display_name,
-      created_at: profile.auth_users?.created_at || profile.created_at
+      created_at: profile.created_at
     })) || [];
   } catch (error) {
     console.error('Exception fetching users:', error);

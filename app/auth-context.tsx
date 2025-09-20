@@ -48,7 +48,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
                 const role = roleData || "user";
 
-                // Get user profile
+                // Try to get user profile, but don't fail if it doesn't exist
                 const { data: profileData, error: profileError } = await supabaseClient
                     .from('user_profiles')
                     .select('*')
@@ -56,8 +56,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                     .single();
 
                 if (profileError) {
-                    console.error("Error fetching user profile:", profileError);
-                    return { role, profile: null };
+                    // Profile doesn't exist - this is OK, we'll use default values
+                    console.log("No profile found for user, using defaults");
+                    return { 
+                        role, 
+                        profile: {
+                            user_id: userId,
+                            username: `user_${userId.slice(0, 8)}`,
+                            display_name: 'User',
+                            role: role,
+                            is_active: true
+                        }
+                    };
                 }
 
                 return { role, profile: profileData };

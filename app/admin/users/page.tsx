@@ -27,22 +27,23 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 
-interface User {
+interface UserRow {
     id: string;
-    email: string;
-    username: string;
+    email?: string;
+    username?: string;
+    display_name?: string;
     role: string;
     created_at: string;
-    updated_at: string;
-    polls_count: number;
-    votes_count: number;
-    last_activity: string;
+    updated_at?: string;
+    polls_count?: number;
+    votes_count?: number;
+    last_activity?: string;
 }
 
 export default function AdminUsers() {
-    const { isAdmin } = useAuth();
-    const [users, setUsers] = useState<User[]>([]);
-    const [filteredUsers, setFilteredUsers] = useState<User[]>([]);
+    const { isAdmin, user } = useAuth();
+    const [users, setUsers] = useState<UserRow[]>([]);
+    const [filteredUsers, setFilteredUsers] = useState<UserRow[]>([]);
     const [searchTerm, setSearchTerm] = useState("");
     const [loading, setLoading] = useState(true);
 
@@ -53,20 +54,20 @@ export default function AdminUsers() {
     }, [isAdmin]);
 
     useEffect(() => {
-        const filtered = users.filter(
-            (user) =>
-                user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                user.username
-                    ?.toLowerCase()
-                    .includes(searchTerm.toLowerCase()) ||
-                user.role.toLowerCase().includes(searchTerm.toLowerCase())
-        );
+        const term = searchTerm.toLowerCase();
+        const filtered = users.filter((u) => {
+            const name = (u.display_name || u.username || "").toLowerCase();
+            const email = (u.email || "").toLowerCase();
+            const role = (u.role || "").toLowerCase();
+            return name.includes(term) || email.includes(term) || role.includes(term);
+        });
         setFilteredUsers(filtered);
     }, [users, searchTerm]);
 
+    const isAutoUsername = (val?: string) => !!val && /^user_[0-9a-f]{8}$/i.test(val);
+
     const loadUsers = async () => {
         try {
-            const { user } = useAuth();
             if (!user) return;
 
             const response = await fetch('/api/admin/users', {
@@ -77,7 +78,7 @@ export default function AdminUsers() {
 
             if (response.ok) {
                 const data = await response.json();
-                setUsers(data.users);
+                setUsers(data.users as UserRow[]);
             } else {
                 console.error('Error loading users:', await response.text());
             }
@@ -90,7 +91,6 @@ export default function AdminUsers() {
 
     const handleRoleChange = async (userId: string, newRole: string) => {
         try {
-            const { user } = useAuth();
             if (!user) return;
 
             const response = await fetch('/api/admin/users', {
@@ -106,7 +106,6 @@ export default function AdminUsers() {
             });
 
             if (response.ok) {
-                // Reload users to reflect changes
                 await loadUsers();
             } else {
                 const error = await response.json();
@@ -119,9 +118,7 @@ export default function AdminUsers() {
     };
 
     const handleDeleteUser = async (userId: string) => {
-        alert(
-            "User deletion is temporarily disabled due to profiles table removal"
-        );
+        alert("User deletion is temporarily disabled due to profiles table removal");
     };
 
     const getRoleColor = (role: string) => {
@@ -147,8 +144,7 @@ export default function AdminUsers() {
                     </CardHeader>
                     <CardContent>
                         <p className="text-muted-foreground">
-                            You do not have admin privileges to access this
-                            page.
+                            You do not have admin privileges to access this page.
                         </p>
                     </CardContent>
                 </Card>
@@ -180,9 +176,7 @@ export default function AdminUsers() {
                 <CardHeader>
                     <div className="flex justify-between items-center">
                         <div>
-                            <CardTitle className="text-white">
-                                All Users
-                            </CardTitle>
+                            <CardTitle className="text-white">All Users</CardTitle>
                             <CardDescription className="text-slate-400">
                                 {users.length} total users
                             </CardDescription>
@@ -201,118 +195,64 @@ export default function AdminUsers() {
                 </CardHeader>
                 <CardContent>
                     <div className="space-y-4">
-                        {filteredUsers.map((user) => (
-                            <div
-                                key={user.id}
-                                className="border border-slate-700 rounded-lg p-4 bg-slate-800/30"
-                            >
-                                <div className="flex items-center justify-between">
-                                    <div className="flex items-center space-x-4">
-                                        <div className="w-10 h-10 bg-slate-700 rounded-full flex items-center justify-center">
-                                            <User className="w-5 h-5 text-slate-300" />
+                        {filteredUsers.map((u) => {
+                            const primaryName = u.display_name || (!isAutoUsername(u.username) ? u.username : undefined) || `${u.id.slice(0, 8)}…`;
+                            const secondaryHandle = !isAutoUsername(u.username) ? u.username : undefined;
+                            const showEmail = u.email && u.email.includes("@");
+                            return (
+                                <div key={u.id} className="border border-slate-700 rounded-lg p-4 bg-slate-800/30">
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center space-x-4">
+                                            <div className="w-10 h-10 bg-slate-700 rounded-full flex items-center justify-center">
+                                                <User className="w-5 h-5 text-slate-300" />
+                                            </div>
+                                            <div>
+                                                <div className="flex items-center space-x-2">
+                                                    <h3 className="font-semibold text-white">{primaryName}</h3>
+                                                    <Badge variant={getRoleColor(u.role) as any}>{u.role}</Badge>
+                                                </div>
+                                                <div className="text-sm text-slate-400 space-x-2">
+                                                    {secondaryHandle && <span>@{secondaryHandle}</span>}
+                                                    {showEmail && <span>• {u.email}</span>}
+                                                </div>
+                                            </div>
                                         </div>
-                                        <div>
-                                            <div className="flex items-center space-x-2">
-                                                <h3 className="font-semibold text-white">
-                                                    {user.email}
-                                                </h3>
-                                                <Badge
-                                                    variant={
-                                                        getRoleColor(
-                                                            user.role
-                                                        ) as any
-                                                    }
+
+                                        <div className="flex items-center space-x-4">
+                                            <div className="text-sm text-slate-300 space-y-1">
+                                                <div className="flex items-center space-x-2">
+                                                    <Calendar className="w-4 h-4" />
+                                                    <span>
+                                                        Joined: {format(new Date(u.created_at), "MMM d, yyyy")}
+                                                    </span>
+                                                </div>
+                                            </div>
+
+                                            <div className="flex space-x-2">
+                                                <select
+                                                    value={u.role}
+                                                    onChange={(e) => handleRoleChange(u.id, e.target.value)}
+                                                    className="bg-slate-700 border-slate-600 text-white rounded px-2 py-1 text-sm"
                                                 >
-                                                    {user.role}
-                                                </Badge>
-                                            </div>
-                                            <p className="text-sm text-slate-400">
-                                                @
-                                                {user.username || "No username"}
-                                            </p>
-                                        </div>
-                                    </div>
+                                                    <option value="user">User</option>
+                                                    <option value="moderator">Moderator</option>
+                                                    <option value="admin">Admin</option>
+                                                </select>
 
-                                    <div className="flex items-center space-x-4">
-                                        <div className="text-sm text-slate-300 space-y-1">
-                                            <div className="flex items-center space-x-2">
-                                                <MessageSquare className="w-4 h-4" />
-                                                <span>
-                                                    {user.polls_count} polls
-                                                </span>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() => handleDeleteUser(u.id)}
+                                                    className="text-red-400 hover:text-red-300 hover:bg-red-900/20"
+                                                >
+                                                    <Trash2 className="w-4 h-4" />
+                                                </Button>
                                             </div>
-                                            <div className="flex items-center space-x-2">
-                                                <BarChart3 className="w-4 h-4" />
-                                                <span>
-                                                    {user.votes_count} votes
-                                                </span>
-                                            </div>
-                                        </div>
-
-                                        <div className="text-sm text-slate-400">
-                                            <div className="flex items-center space-x-2">
-                                                <Calendar className="w-4 h-4" />
-                                                <span>
-                                                    Joined:{" "}
-                                                    {format(
-                                                        new Date(
-                                                            user.created_at
-                                                        ),
-                                                        "MMM d, yyyy"
-                                                    )}
-                                                </span>
-                                            </div>
-                                            <div className="flex items-center space-x-2">
-                                                <Calendar className="w-4 h-4" />
-                                                <span>
-                                                    Active:{" "}
-                                                    {format(
-                                                        new Date(
-                                                            user.last_activity
-                                                        ),
-                                                        "MMM d, yyyy"
-                                                    )}
-                                                </span>
-                                            </div>
-                                        </div>
-
-                                        <div className="flex space-x-2">
-                                            <select
-                                                value={user.role}
-                                                onChange={(e) =>
-                                                    handleRoleChange(
-                                                        user.id,
-                                                        e.target.value
-                                                    )
-                                                }
-                                                className="bg-slate-700 border-slate-600 text-white rounded px-2 py-1 text-sm"
-                                            >
-                                                <option value="user">
-                                                    User
-                                                </option>
-                                                <option value="moderator">
-                                                    Moderator
-                                                </option>
-                                                <option value="admin">
-                                                    Admin
-                                                </option>
-                                            </select>
-
-                                            <Button
-                                                variant="ghost"
-                                                size="sm"
-                                                onClick={() =>
-                                                    handleDeleteUser(user.id)
-                                                }
-                                                className="text-red-400 hover:text-red-300 hover:bg-red-900/20"
-                                            >
-                                                <Trash2 className="w-4 h-4" />
-                                            </Button>
                                         </div>
                                     </div>
                                 </div>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 </CardContent>
             </Card>
