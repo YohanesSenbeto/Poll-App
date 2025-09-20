@@ -5,14 +5,37 @@ import { NextRequest, NextResponse } from 'next/server';
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
-// Types for admin system
+// Enhanced types for role management system
 export type UserRole = 'user' | 'admin' | 'moderator';
+
+export interface UserProfile {
+  id: string;
+  user_id: string;
+  username: string;
+  display_name: string;
+  role: UserRole;
+  avatar_url?: string;
+  bio?: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
 
 export interface AdminUser {
   id: string;
   email: string;
   role: UserRole;
   username?: string;
+  display_name?: string;
+  created_at: string;
+}
+
+export interface RolePermission {
+  id: string;
+  role: UserRole;
+  permission: string;
+  resource: string;
+  action: string;
   created_at: string;
 }
 
@@ -21,27 +44,67 @@ function getAdminClient() {
   return createClient(supabaseUrl, supabaseKey);
 }
 
-// Check if user has admin role by testing database access
-export async function isAdmin(userId: string): Promise<boolean> {
+// Enhanced role checking functions
+export async function getUserRole(userId: string): Promise<UserRole> {
   try {
     const supabase = getAdminClient();
     
-    // Simple admin detection: check if user can access polls table without restrictions
     const { data, error } = await supabase
-      .from('polls')
-      .select('id')
-      .limit(1);
+      .rpc('get_user_role', { user_uuid: userId });
 
-    // If we can access polls without error, consider this admin access
-    return !error;
+    if (error) {
+      console.error('Error getting user role:', error);
+      return 'user';
+    }
+
+    return data || 'user';
   } catch (error) {
-    console.error('Exception checking admin status:', error);
+    console.error('Exception getting user role:', error);
+    return 'user';
+  }
+}
+
+export async function isAdmin(userId: string): Promise<boolean> {
+  const role = await getUserRole(userId);
+  return role === 'admin';
+}
+
+export async function isModerator(userId: string): Promise<boolean> {
+  const role = await getUserRole(userId);
+  return role === 'moderator' || role === 'admin';
+}
+
+export async function hasPermission(
+  userId: string,
+  permission: string,
+  resource: string,
+  action: string
+): Promise<boolean> {
+  try {
+    const supabase = getAdminClient();
+    
+    const { data, error } = await supabase
+      .rpc('user_has_permission', {
+        user_uuid: userId,
+        permission_name: permission,
+        resource_name: resource,
+        action_name: action
+      });
+
+    if (error) {
+      console.error('Error checking permission:', error);
+      return false;
+    }
+
+    return data || false;
+  } catch (error) {
+    console.error('Exception checking permission:', error);
     return false;
   }
 }
 
-// Get current admin user with role (simplified without profiles)
-export async function getCurrentAdminUser(): Promise<AdminUser | null> {
+// Get current user with enhanced profile information
+export async function getCurrentUser(): Promise<AdminUser | null> {
   try {
     const supabase = getAdminClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -50,17 +113,41 @@ export async function getCurrentAdminUser(): Promise<AdminUser | null> {
       return null;
     }
 
-    // Return basic user info without profiles table
+    // Get user profile with role information
+    const { data: profile, error: profileError } = await supabase
+      .from('user_profiles')
+      .select('*')
+      .eq('user_id', user.id)
+      .single();
+
+    if (profileError) {
+      console.error('Error fetching user profile:', profileError);
+      // Return basic user info if profile doesn't exist
+      return {
+        id: user.id,
+        email: user.email || '',
+        role: 'user',
+        created_at: user.created_at || new Date().toISOString()
+      } as AdminUser;
+    }
+
     return {
       id: user.id,
       email: user.email || '',
-      role: (await isAdmin(user.id)) ? 'admin' : 'user',
+      role: profile.role,
+      username: profile.username,
+      display_name: profile.display_name,
       created_at: user.created_at || new Date().toISOString()
     } as AdminUser;
   } catch (error) {
-    console.error('Exception fetching admin user:', error);
+    console.error('Exception fetching current user:', error);
     return null;
   }
+}
+
+// Legacy function for backward compatibility
+export async function getCurrentAdminUser(): Promise<AdminUser | null> {
+  return getCurrentUser();
 }
 
 // Admin middleware for protecting admin routes
@@ -96,6 +183,101 @@ export async function adminMiddleware(request: NextRequest) {
   }
 }
 
+// Role management functions
+export async function updateUserRole(
+  adminId: string,
+  targetUserId: string,
+  newRole: UserRole
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const supabase = getAdminClient();
+    
+    // Check if admin has permission to manage roles
+    const hasPermission = await hasPermission(adminId, 'roles', 'user_roles', 'manage');
+    if (!hasPermission) {
+      return { success: false, error: 'Insufficient permissions' };
+    }
+
+    // Update user role
+    const { error } = await supabase
+      .from('user_profiles')
+      .update({ role: newRole })
+      .eq('user_id', targetUserId);
+
+    if (error) {
+      console.error('Error updating user role:', error);
+      return { success: false, error: error.message };
+    }
+
+    // Log the action
+    await logAdminAction(adminId, 'update_user_role', targetUserId, 'user_profile', {
+      new_role: newRole
+    });
+
+    return { success: true };
+  } catch (error) {
+    console.error('Exception updating user role:', error);
+    return { success: false, error: 'Internal server error' };
+  }
+}
+
+export async function getAllUsers(): Promise<AdminUser[]> {
+  try {
+    const supabase = getAdminClient();
+    
+    const { data, error } = await supabase
+      .from('user_profiles')
+      .select(`
+        *,
+        auth_users:user_id (
+          email,
+          created_at
+        )
+      `)
+      .eq('is_active', true)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching users:', error);
+      return [];
+    }
+
+    return data?.map(profile => ({
+      id: profile.user_id,
+      email: profile.auth_users?.email || 'unknown@example.com',
+      role: profile.role,
+      username: profile.username,
+      display_name: profile.display_name,
+      created_at: profile.auth_users?.created_at || profile.created_at
+    })) || [];
+  } catch (error) {
+    console.error('Exception fetching users:', error);
+    return [];
+  }
+}
+
+export async function getUserProfile(userId: string): Promise<UserProfile | null> {
+  try {
+    const supabase = getAdminClient();
+    
+    const { data, error } = await supabase
+      .from('user_profiles')
+      .select('*')
+      .eq('user_id', userId)
+      .single();
+
+    if (error) {
+      console.error('Error fetching user profile:', error);
+      return null;
+    }
+
+    return data;
+  } catch (error) {
+    console.error('Exception fetching user profile:', error);
+    return null;
+  }
+}
+
 // Log admin actions for audit trail
 export async function logAdminAction(
   adminId: string,
@@ -122,6 +304,35 @@ export async function logAdminAction(
     }
   } catch (error) {
     console.error('Exception logging admin action:', error);
+  }
+}
+
+// Log moderator actions for audit trail
+export async function logModeratorAction(
+  moderatorId: string,
+  actionType: string,
+  targetId?: string,
+  targetType?: string,
+  actionDetails?: any
+) {
+  try {
+    const supabase = getAdminClient();
+    
+    const { error } = await supabase
+      .from('moderator_actions')
+      .insert({
+        moderator_id: moderatorId,
+        action_type: actionType,
+        target_id: targetId,
+        target_type: targetType,
+        action_details: actionDetails || {}
+      });
+
+    if (error) {
+      console.error('Error logging moderator action:', error);
+    }
+  } catch (error) {
+    console.error('Exception logging moderator action:', error);
   }
 }
 

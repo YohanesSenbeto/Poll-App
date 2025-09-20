@@ -66,91 +66,21 @@ export default function AdminUsers() {
 
     const loadUsers = async () => {
         try {
-            // Get user data from polls and votes without profiles table
-            const { data: allPolls } = await supabase
-                .from("polls")
-                .select("user_id, created_at");
+            const { user } = useAuth();
+            if (!user) return;
 
-            const { data: allVotes } = await supabase
-                .from("votes")
-                .select("user_id, created_at");
-
-            // Create user stats from polls and votes
-            const userStats = new Map();
-
-            allPolls?.forEach((poll) => {
-                if (poll.user_id) {
-                    const stats = userStats.get(poll.user_id) || {
-                        polls_count: 0,
-                        votes_count: 0,
-                        created_at: poll.created_at,
-                        last_activity: poll.created_at,
-                        role: "user",
-                    };
-                    stats.polls_count += 1;
-                    // Update last_activity to the most recent activity
-                    if (
-                        new Date(poll.created_at) >
-                        new Date(stats.last_activity)
-                    ) {
-                        stats.last_activity = poll.created_at;
-                    }
-                    userStats.set(poll.user_id, stats);
-                }
+            const response = await fetch('/api/admin/users', {
+                headers: {
+                    'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
+                },
             });
 
-            allVotes?.forEach((vote) => {
-                if (vote.user_id) {
-                    const stats = userStats.get(vote.user_id) || {
-                        polls_count: 0,
-                        votes_count: 0,
-                        created_at: vote.created_at,
-                        last_activity: vote.created_at,
-                        role: "user",
-                    };
-                    stats.votes_count += 1;
-                    // Update last_activity to the most recent activity
-                    if (
-                        new Date(vote.created_at) >
-                        new Date(stats.last_activity)
-                    ) {
-                        stats.last_activity = vote.created_at;
-                    }
-                    userStats.set(vote.user_id, stats);
-                }
-            });
-
-            // Get actual user emails from auth.users (if accessible)
-            let userEmails = new Map();
-            try {
-                const { data: authUsers } = await supabase
-                    .from("auth.users")
-                    .select("id, email, created_at");
-
-                authUsers?.forEach((user) => {
-                    userEmails.set(user.id, user.email);
-                });
-            } catch (error) {
-                console.log("Cannot access auth.users, using fallback data");
+            if (response.ok) {
+                const data = await response.json();
+                setUsers(data.users);
+            } else {
+                console.error('Error loading users:', await response.text());
             }
-
-            // Convert to array format with all required properties
-            const usersWithCounts = Array.from(userStats.entries()).map(
-                ([user_id, stats]) => ({
-                    id: user_id,
-                    email: userEmails.get(user_id) || "unknown@example.com",
-                    username: `user_${user_id.slice(0, 8)}`,
-                    polls_count: stats.polls_count,
-                    votes_count: stats.votes_count,
-                    created_at: stats.created_at || new Date().toISOString(),
-                    updated_at: stats.last_activity || new Date().toISOString(),
-                    last_activity:
-                        stats.last_activity || new Date().toISOString(),
-                    role: stats.role,
-                })
-            );
-
-            setUsers(usersWithCounts);
         } catch (error) {
             console.error("Error loading users:", error);
         } finally {
@@ -159,9 +89,33 @@ export default function AdminUsers() {
     };
 
     const handleRoleChange = async (userId: string, newRole: string) => {
-        alert(
-            "User role management is temporarily disabled due to profiles table removal"
-        );
+        try {
+            const { user } = useAuth();
+            if (!user) return;
+
+            const response = await fetch('/api/admin/users', {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
+                },
+                body: JSON.stringify({
+                    targetUserId: userId,
+                    newRole: newRole,
+                }),
+            });
+
+            if (response.ok) {
+                // Reload users to reflect changes
+                await loadUsers();
+            } else {
+                const error = await response.json();
+                alert(`Error updating role: ${error.error}`);
+            }
+        } catch (error) {
+            console.error('Error updating role:', error);
+            alert('Error updating role. Please try again.');
+        }
     };
 
     const handleDeleteUser = async (userId: string) => {

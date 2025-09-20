@@ -13,11 +13,14 @@ import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 interface AuthContextType {
     user: User | null;
     userRole: string | null;
+    userProfile: any | null;
     loading: boolean;
     signIn: (email: string, password: string) => Promise<void>;
     signUp: (email: string, password: string) => Promise<void>;
     signOut: () => Promise<void>;
     isAdmin: boolean;
+    isModerator: boolean;
+    hasPermission: (permission: string, resource: string, action: string) => Promise<boolean>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -25,27 +28,42 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [user, setUser] = useState<User | null>(null);
     const [userRole, setUserRole] = useState<string | null>(null);
+    const [userProfile, setUserProfile] = useState<any | null>(null);
     const [loading, setLoading] = useState(true);
     const [supabaseClient] = useState(() => createClientComponentClient());
 
-    // Memoized function to check user role
-    const checkUserRole = useCallback(
-        async (userId: string): Promise<string | null> => {
+    // Memoized function to check user role and profile
+    const checkUserRoleAndProfile = useCallback(
+        async (userId: string): Promise<{ role: string | null; profile: any | null }> => {
             try {
-                const { data, error } = await supabaseClient.rpc(
+                const { data: roleData, error: roleError } = await supabaseClient.rpc(
                     "get_user_role",
-                    { user_id: userId }
+                    { user_uuid: userId }
                 );
 
-                if (error) {
-                    console.error("Error checking user role:", error);
-                    return "user";
+                if (roleError) {
+                    console.error("Error checking user role:", roleError);
+                    return { role: "user", profile: null };
                 }
 
-                return data || "user";
+                const role = roleData || "user";
+
+                // Get user profile
+                const { data: profileData, error: profileError } = await supabaseClient
+                    .from('user_profiles')
+                    .select('*')
+                    .eq('user_id', userId)
+                    .single();
+
+                if (profileError) {
+                    console.error("Error fetching user profile:", profileError);
+                    return { role, profile: null };
+                }
+
+                return { role, profile: profileData };
             } catch (error) {
-                console.error("Exception checking user role:", error);
-                return "user";
+                console.error("Exception checking user role and profile:", error);
+                return { role: "user", profile: null };
             }
         },
         [supabaseClient]
@@ -65,10 +83,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                     setUser(currentUser);
 
                     if (currentUser) {
-                        const role = await checkUserRole(currentUser.id);
+                        const { role, profile } = await checkUserRoleAndProfile(currentUser.id);
                         setUserRole(role);
+                        setUserProfile(profile);
                     } else {
                         setUserRole(null);
+                        setUserProfile(null);
                     }
                 }
             } catch (error) {
@@ -76,6 +96,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 if (isMounted) {
                     setUser(null);
                     setUserRole(null);
+                    setUserProfile(null);
                 }
             } finally {
                 if (isMounted) {
@@ -95,10 +116,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setUser(currentUser);
 
             if (currentUser) {
-                const role = await checkUserRole(currentUser.id);
+                const { role, profile } = await checkUserRoleAndProfile(currentUser.id);
                 setUserRole(role);
+                setUserProfile(profile);
             } else {
                 setUserRole(null);
+                setUserProfile(null);
             }
 
             setLoading(false);
@@ -108,7 +131,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             isMounted = false;
             subscription.unsubscribe();
         };
-    }, [supabaseClient, checkUserRole]);
+    }, [supabaseClient, checkUserRoleAndProfile]);
 
     const signIn = async (email: string, password: string) => {
         try {
@@ -169,17 +192,44 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
 
     const isAdmin = userRole === "admin";
+    const isModerator = userRole === "moderator" || userRole === "admin";
+
+    const hasPermission = async (permission: string, resource: string, action: string): Promise<boolean> => {
+        if (!user) return false;
+        
+        try {
+            const { data, error } = await supabaseClient.rpc('user_has_permission', {
+                user_uuid: user.id,
+                permission_name: permission,
+                resource_name: resource,
+                action_name: action
+            });
+
+            if (error) {
+                console.error('Error checking permission:', error);
+                return false;
+            }
+
+            return data || false;
+        } catch (error) {
+            console.error('Exception checking permission:', error);
+            return false;
+        }
+    };
 
     return (
         <AuthContext.Provider
             value={{
                 user,
                 userRole,
+                userProfile,
                 loading,
                 signIn,
                 signUp,
                 signOut,
                 isAdmin,
+                isModerator,
+                hasPermission,
             }}
         >
             {children}

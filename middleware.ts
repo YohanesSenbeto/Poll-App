@@ -3,36 +3,46 @@ import { createMiddlewareClient } from '@supabase/auth-helpers-nextjs'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
-// Cache admin checks to avoid repeated database calls
-const adminCache = new Map<string, { isAdmin: boolean; timestamp: number }>()
+// Cache role checks to avoid repeated database calls
+const roleCache = new Map<string, { role: string; timestamp: number }>()
 const CACHE_DURATION = 5 * 60 * 1000 // 5 minutes
 
-async function isAdmin(supabase: any, userId: string): Promise<boolean> {
+async function getUserRole(supabase: any, userId: string): Promise<string> {
   // Check cache first
-  const cached = adminCache.get(userId)
+  const cached = roleCache.get(userId)
   if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
-    return cached.isAdmin
+    return cached.role
   }
 
   try {
     const { data, error } = await supabase
-      .rpc('get_user_role', { user_id: userId })
+      .rpc('get_user_role', { user_uuid: userId })
     
     if (error) {
-      console.error('Error checking admin status:', error)
-      return false
+      console.error('Error checking user role:', error)
+      return 'user'
     }
     
-    const isAdminResult = data === 'admin'
+    const userRole = data || 'user'
     
     // Cache the result
-    adminCache.set(userId, { isAdmin: isAdminResult, timestamp: Date.now() })
+    roleCache.set(userId, { role: userRole, timestamp: Date.now() })
     
-    return isAdminResult
+    return userRole
   } catch (error) {
-    console.error('Exception checking admin status:', error)
-    return false
+    console.error('Exception checking user role:', error)
+    return 'user'
   }
+}
+
+async function isAdmin(supabase: any, userId: string): Promise<boolean> {
+  const role = await getUserRole(supabase, userId)
+  return role === 'admin'
+}
+
+async function isModerator(supabase: any, userId: string): Promise<boolean> {
+  const role = await getUserRole(supabase, userId)
+  return role === 'moderator' || role === 'admin'
 }
 
 export async function middleware(request: NextRequest) {
@@ -49,6 +59,20 @@ export async function middleware(request: NextRequest) {
 
     const isUserAdmin = await isAdmin(supabase, session.user.id)
     if (!isUserAdmin) {
+      return NextResponse.redirect(new URL('/unauthorized', request.url))
+    }
+  }
+
+  // Protect moderator routes
+  if (request.nextUrl.pathname.startsWith('/moderator')) {
+    const { data: { session } } = await supabase.auth.getSession()
+
+    if (!session) {
+      return NextResponse.redirect(new URL('/auth/login', request.url))
+    }
+
+    const isUserModerator = await isModerator(supabase, session.user.id)
+    if (!isUserModerator) {
       return NextResponse.redirect(new URL('/unauthorized', request.url))
     }
   }
@@ -71,5 +95,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/admin/:path*', '/profile/:path*', '/polls/create/:path*'],
+  matcher: ['/admin/:path*', '/moderator/:path*', '/profile/:path*', '/polls/create/:path*'],
 }
