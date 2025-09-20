@@ -92,11 +92,13 @@ export default function AdminDashboard() {
                 .from("polls")
                 .select("*", { count: "exact", head: true });
 
+            // Use user_profiles instead of auth.users (more reliable with RLS)
             const { count: totalUsers } = await supabase
-                .from("auth.users")
+                .from("user_profiles")
                 .select("*", { count: "exact", head: true });
 
-            const { count: totalVotes } = await supabase
+            // Votes count (may be restricted by RLS). We'll compute a fallback later
+            const { count: totalVotesRaw } = await supabase
                 .from("votes")
                 .select("*", { count: "exact", head: true });
 
@@ -110,22 +112,22 @@ export default function AdminDashboard() {
                 .select("*", { count: "exact", head: true })
                 .eq("is_active", false);
 
-            // User breakdowns - use auth.users for counts
+            // User breakdowns - count by role from user_profiles
             const { count: adminUsers } = await supabase
-                .from("auth.users")
+                .from("user_profiles")
                 .select("*", { count: "exact", head: true })
                 .eq("role", "admin");
 
             const { count: regularUsers } = await supabase
-                .from("auth.users")
+                .from("user_profiles")
                 .select("*", { count: "exact", head: true })
                 .eq("role", "user");
 
-            // Count verified users (email confirmed)
+            // Verified users: approximate with active profiles
             const { count: verifiedUsers } = await supabase
-                .from("auth.users")
+                .from("user_profiles")
                 .select("*", { count: "exact", head: true })
-                .not("email_confirmed_at", "is", null);
+                .eq("is_active", true);
 
             // Poll creators and engagement
             const { data: activeCreators } = await supabase
@@ -136,7 +138,7 @@ export default function AdminDashboard() {
                 activeCreators?.map((p) => p.user_id)
             ).size;
 
-            // Language analytics
+            // Language analytics (best-effort if tables exist)
             const { data: trendingLanguages } = await supabase
                 .from("daily_analytics")
                 .select("language_name, total_value")
@@ -155,7 +157,7 @@ export default function AdminDashboard() {
                 .select("*")
                 .order("name");
 
-            // Daily stats with both polls and votes
+            // Daily stats
             const { data: dailyPollStats } = await supabase
                 .from("daily_analytics")
                 .select("date, total_value")
@@ -170,13 +172,13 @@ export default function AdminDashboard() {
                 .order("date", { ascending: false })
                 .limit(14);
 
-            // Recent activity
+            // Recent activity (use user_profiles instead of profiles)
             const { data: recentPolls } = await supabase
                 .from("polls")
                 .select(
                     `
                     *,
-                    profiles:user_id (email, username, role),
+                    user_profiles:user_id (username, display_name, role),
                     options (
                         id,
                         option_text,
@@ -192,102 +194,49 @@ export default function AdminDashboard() {
                 .select(
                     `
                     *,
-                    profiles:user_id (email, username),
+                    user_profiles:user_id (username, display_name),
                     polls:poll_id (title, user_id)
                 `
                 )
                 .order("created_at", { ascending: false })
                 .limit(20);
 
-            // User statistics - handle missing profiles table
+            // User statistics from profiles
             let allUsers: any[] = [];
             let usersWithStats: User[] = [];
-
             try {
-                // Try to fetch users with the new RLS policy
-                const { data: authUsers, error: authError } = await supabase
-                    .from("auth.users")
-                    .select("id, email, created_at, email_confirmed_at")
-                    .order("created_at", { ascending: false });
+                const { data: profileUsers, error: profileErr } = await supabase
+                    .from("user_profiles")
+                    .select("user_id, username, display_name, role, created_at");
 
-                if (authError) {
-                    console.warn(
-                        "Cannot access auth.users, using fallback:",
-                        authError.message
-                    );
-
-                    // Fallback: reconstruct users from polls and votes
-                    const { data: pollUsers } = await supabase
-                        .from("polls")
-                        .select("user_id, created_at")
-                        .not("user_id", "is", null);
-
-                    const { data: voteUsers } = await supabase
-                        .from("votes")
-                        .select("user_id, created_at")
-                        .not("user_id", "is", null);
-
-                    const userSet = new Set();
-                    const userTimestamps = new Map();
-
-                    pollUsers?.forEach((poll) => {
-                        if (poll.user_id) {
-                            userSet.add(poll.user_id);
-                            userTimestamps.set(poll.user_id, poll.created_at);
-                        }
-                    });
-
-                    voteUsers?.forEach((vote) => {
-                        if (vote.user_id) {
-                            userSet.add(vote.user_id);
-                            userTimestamps.set(vote.user_id, vote.created_at);
-                        }
-                    });
-
-                    allUsers = Array.from(userSet).map((userId: any) => ({
-                        id: userId,
-                        email: `${userId.slice(0, 8)}@user.com`,
-                        username: `user_${userId.slice(0, 8)}`,
-                        role: "user",
-                        created_at:
-                            userTimestamps.get(userId) ||
-                            new Date().toISOString(),
-                        email_confirmed: false,
-                    }));
-                } else {
-                    // Successfully fetched from auth.users
-                    allUsers = authUsers.map((user) => ({
-                        id: user.id,
-                        email: user.email || "Unknown",
-                        username: user.email?.split("@")[0] || "user",
-                        role: "user",
-                        created_at: user.created_at,
-                        email_confirmed: !!user.email_confirmed_at,
+                if (!profileErr && profileUsers) {
+                    allUsers = profileUsers.map((u) => ({
+                        id: u.user_id,
+                        email: "", // email not in user_profiles
+                        username: u.display_name || u.username || `user_${String(u.user_id).slice(0,8)}`,
+                        role: u.role || "user",
+                        created_at: u.created_at,
                     }));
                 }
 
-                // Get user statistics
                 usersWithStats = await Promise.all(
-                    allUsers.map(async (user) => {
+                    allUsers.map(async (u) => {
                         const { count: pollsCount } = await supabase
                             .from("polls")
                             .select("*", { count: "exact", head: true })
-                            .eq("user_id", user.id);
-
+                            .eq("user_id", u.id);
                         const { count: votesCount } = await supabase
                             .from("votes")
                             .select("*", { count: "exact", head: true })
-                            .eq("user_id", user.id);
-
+                            .eq("user_id", u.id);
                         return {
-                            ...user,
+                            ...u,
                             polls_count: pollsCount || 0,
                             votes_count: votesCount || 0,
-                        };
+                        } as User;
                     })
                 );
 
-                // Sort by creation date
                 usersWithStats.sort(
                     (a, b) =>
                         new Date(b.created_at).getTime() -
@@ -299,19 +248,19 @@ export default function AdminDashboard() {
             }
 
             const enrichedPolls =
-                recentPolls?.map((poll) => ({
+                recentPolls?.map((poll: any) => ({
                     id: poll.id,
                     title: poll.title,
                     description: poll.description,
                     created_at: poll.created_at,
                     user_id: poll.user_id,
                     is_active: poll.is_active,
-                    creator_email: poll.profiles?.email || "Unknown",
+                    creator_email: "", // not available
                     creator_username:
-                        poll.profiles?.username ||
-                        poll.profiles?.email?.split("@")[0] ||
-                        "user",
-                    creator_role: poll.profiles?.role || "user",
+                        poll.user_profiles?.display_name ||
+                        poll.user_profiles?.username ||
+                        `user_${String(poll.user_id).slice(0, 8)}`,
+                    creator_role: poll.user_profiles?.role || "user",
                     vote_count:
                         poll.options?.reduce(
                             (sum: number, opt: any) =>
@@ -322,15 +271,21 @@ export default function AdminDashboard() {
                     options: poll.options || [],
                 })) || [];
 
+            // Fallback computed totals
+            const computedTotalVotes = enrichedPolls.reduce(
+                (sum, p) => sum + (p.vote_count || 0),
+                0
+            );
+
             setPolls(enrichedPolls);
             setUsers(usersWithStats);
 
             setAnalytics({
-                total_polls: totalPolls || 0,
-                total_users: totalUsers || 0,
-                total_votes: totalVotes || 0,
+                total_polls: totalPolls || enrichedPolls.length || 0,
+                total_users: totalUsers || (allUsers?.length || 0),
+                total_votes: totalVotesRaw ?? computedTotalVotes,
                 active_polls: activePolls || 0,
-                inactive_polls: inactivePolls || 0,
+                inactive_polls: inactivePolls || Math.max((totalPolls || 0) - (activePolls || 0), 0),
                 admin_users: adminUsers || 0,
                 regular_users: regularUsers || 0,
                 verified_users: verifiedUsers || 0,

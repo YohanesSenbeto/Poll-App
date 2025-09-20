@@ -70,11 +70,7 @@ export default function AdminUsers() {
         try {
             if (!user) return;
 
-            const response = await fetch('/api/admin/users', {
-                headers: {
-                    'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
-                },
-            });
+            const response = await fetch('/api/admin/users');
 
             if (response.ok) {
                 const data = await response.json();
@@ -97,7 +93,6 @@ export default function AdminUsers() {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
                 },
                 body: JSON.stringify({
                     targetUserId: userId,

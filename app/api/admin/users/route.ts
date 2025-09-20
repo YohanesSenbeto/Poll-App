@@ -1,39 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-import { updateUserRole, getAllUsers, getUserRole, isAdmin } from '@/lib/admin-auth';
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+import { cookies } from 'next/headers';
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = createClient(supabaseUrl, supabaseKey);
-    
-    // Get the authorization header
-    const authHeader = request.headers.get('Authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
+    const supabase = createRouteHandlerClient({ cookies });
+
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const token = authHeader.split(' ')[1];
-    const { data: { user }, error } = await supabase.auth.getUser(token);
-
-    if (error || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    // Check if user is admin - simplified check
+    // Check if user is admin (from user_profiles)
     const { data: profile } = await supabase
       .from('user_profiles')
       .select('role')
-      .eq('user_id', user.id)
+      .eq('user_id', session.user.id)
       .single();
 
     if (!profile || profile.role !== 'admin') {
       return NextResponse.json({ error: 'Forbidden: Admin access required' }, { status: 403 });
     }
 
-    // Get all users - direct query since RLS is disabled
+    // Fetch users from user_profiles
     const { data: users, error: usersError } = await supabase
       .from('user_profiles')
       .select('*')
@@ -41,20 +30,18 @@ export async function GET(request: NextRequest) {
       .order('created_at', { ascending: false });
 
     if (usersError) {
-      console.error('Error fetching users:', usersError);
-      return NextResponse.json({ error: 'Failed to fetch users' }, { status: 500 });
+      return NextResponse.json({ error: usersError.message }, { status: 500 });
     }
 
-    // Map to AdminUser format
-    const adminUsers = users?.map(profile => ({
-      id: profile.user_id,
-      email: 'user@example.com', // We'll get this from auth context
-      role: profile.role,
-      username: profile.username,
-      display_name: profile.display_name,
-      created_at: profile.created_at
-    })) || [];
-    
+    const adminUsers = (users || []).map((u: any) => ({
+      id: u.user_id,
+      email: '',
+      username: u.username,
+      display_name: u.display_name,
+      role: u.role,
+      created_at: u.created_at,
+    }));
+
     return NextResponse.json({ users: adminUsers });
   } catch (error) {
     console.error('Error fetching users:', error);
@@ -64,24 +51,21 @@ export async function GET(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
-    const supabase = createClient(supabaseUrl, supabaseKey);
-    
-    // Get the authorization header
-    const authHeader = request.headers.get('Authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
+    const supabase = createRouteHandlerClient({ cookies });
+
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const token = authHeader.split(' ')[1];
-    const { data: { user }, error } = await supabase.auth.getUser(token);
+    // Ensure caller is admin
+    const { data: profile } = await supabase
+      .from('user_profiles')
+      .select('role')
+      .eq('user_id', session.user.id)
+      .single();
 
-    if (error || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    // Check if user is admin
-    const userIsAdmin = await isAdmin(user.id);
-    if (!userIsAdmin) {
+    if (!profile || profile.role !== 'admin') {
       return NextResponse.json({ error: 'Forbidden: Admin access required' }, { status: 403 });
     }
 
@@ -96,12 +80,25 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid role' }, { status: 400 });
     }
 
-    // Update user role
-    const result = await updateUserRole(user.id, targetUserId, newRole);
-    
-    if (!result.success) {
-      return NextResponse.json({ error: result.error }, { status: 400 });
+    // Update user role directly using the authenticated route client
+    const { error: updateError } = await supabase
+      .from('user_profiles')
+      .update({ role: newRole })
+      .eq('user_id', targetUserId);
+
+    if (updateError) {
+      console.error('Update role error:', updateError);
+      return NextResponse.json({ error: updateError.message }, { status: 500 });
     }
+
+    // Log admin action (best-effort)
+    await supabase.from('admin_actions').insert({
+      admin_id: session.user.id,
+      action_type: 'update_user_role',
+      target_id: targetUserId,
+      target_type: 'user_profile',
+      action_details: { new_role: newRole }
+    });
 
     return NextResponse.json({ success: true, message: 'Role updated successfully' });
   } catch (error) {
