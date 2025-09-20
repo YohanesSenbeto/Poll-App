@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createPoll, getLanguageCatalog } from "@/lib/database";
@@ -9,11 +9,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { AlertCircle } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { notificationManager } from "@/lib/utils/notifications";
 import { useAuth } from "@/app/auth-context";
 import { ProtectedRoute } from "@/components/protected-route";
+import { AlertCircle } from "lucide-react"; // <-- FIX: import AlertCircle icon
 
 const FALLBACK_LANGS = [
     'Python', 'JavaScript', 'TypeScript', 'Java', 'C#', 'C', 'C++', 'Go', 'Rust', 'PHP', 'Ruby',
@@ -55,7 +55,7 @@ function CreatePollForm() {
         setFieldErrors(errors);
     }, [title, description, languages]);
 
-    const handleSubmit = async (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
 
         if (!user) {
@@ -122,13 +122,13 @@ function CreatePollForm() {
                         <form onSubmit={handleSubmit} className="space-y-6">
                             <div className="space-y-1">
                                 <Label>Poll Title *</Label>
-                                <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="What's your question?" />
+                                <Input value={title} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTitle(e.target.value)} placeholder="What's your question?" />
                                 {fieldErrors.title && <p className="text-sm text-red-600">{fieldErrors.title}</p>}
                             </div>
 
                             <div className="space-y-1">
                                 <Label>Description</Label>
-                                <Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="(optional) Provide more context for voters" rows={3} />
+                                <Textarea value={description} onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setDescription(e.target.value)} placeholder="(optional) Provide more context for voters" rows={3} />
                                 {fieldErrors.description && <p className="text-sm text-red-600">{fieldErrors.description}</p>}
                             </div>
 

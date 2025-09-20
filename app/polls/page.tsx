@@ -11,7 +11,7 @@ import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 
 export default function PollsPage() {
     const [polls, setPolls] = useState<any[]>([]);
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const { user, loading: authLoading } = useAuth();
     const router = useRouter();
@@ -29,7 +29,6 @@ export default function PollsPage() {
 
     const fetchData = useCallback(async () => {
         try {
-            setLoading(true);
             setError(null);
             // Defer heavy summary; only fetch user's own polls for management
             if (user?.id) {
@@ -41,7 +40,7 @@ export default function PollsPage() {
         } catch (err) {
             setError(err instanceof Error ? err.message : "Failed to load polls");
         } finally {
-            setLoading(false);
+            // keep UI responsive; no blocking spinner
         }
     }, [user]);
 
@@ -58,7 +57,7 @@ export default function PollsPage() {
     useEffect(() => {
         const channel = supabase
             .channel('votes-feed')
-            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'votes' }, (payload) => {
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'votes' }, (payload: any) => {
                 const pollId = (payload.new as any)?.poll_id as string;
                 if (pollId) {
                     setRefreshByPollId((prev) => ({ ...prev, [pollId]: (prev[pollId] || 0) + 1 }));
@@ -230,13 +229,7 @@ export default function PollsPage() {
         return () => { cancelled = true };
     }, [supabase, polls, refreshByPollId, range, user?.id]);
 
-    if (loading) {
-        return (
-            <div className="flex justify-center items-center h-64">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 dark:border-blue-400"></div>
-            </div>
-        );
-    }
+    // No blocking spinner; render immediately and hydrate sections as data arrives
 
     // Do not block when user is null; show public aggregated view
     // if (!user) return null;

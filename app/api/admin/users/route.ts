@@ -4,7 +4,8 @@ import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = createRouteHandlerClient({ cookies });
+    const cookieStore = await cookies();
+    const supabase = createRouteHandlerClient({ cookies: async () => cookieStore });
 
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.user) {
@@ -51,7 +52,8 @@ export async function GET(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
-    const supabase = createRouteHandlerClient({ cookies });
+    const cookieStore = await cookies();
+    const supabase = createRouteHandlerClient({ cookies: async () => cookieStore });
 
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.user) {

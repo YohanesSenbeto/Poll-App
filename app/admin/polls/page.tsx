@@ -23,7 +23,8 @@ interface Poll {
 
 export default async function AdminPollsPage() {
     // Use cookie-based server client; admin access is enforced by middleware
-    const supabase = createServerComponentClient({ cookies });
+    const cookieStore = await cookies();
+    const supabase = createServerComponentClient({ cookies: async () => cookieStore });
 
     // Get all polls with vote statistics
     const { data: pollsRaw, error } = await supabase
