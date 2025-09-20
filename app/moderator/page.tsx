@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useAuth } from "../../auth-context";
+import { useAuth } from "@/app/auth-context";
 import { supabase } from "@/lib/supabase";
 import {
     Card,

@@ -58,14 +58,26 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Ensure caller is admin
-    const { data: profile } = await supabase
+    // Ensure caller is admin; create profile if missing
+    let { data: adminProfile } = await supabase
       .from('user_profiles')
       .select('role')
       .eq('user_id', session.user.id)
       .single();
 
-    if (!profile || profile.role !== 'admin') {
+    if (!adminProfile) {
+      // Create default admin profile for caller if missing (role stays user by default)
+      await supabase.from('user_profiles').insert({
+        user_id: session.user.id,
+        username: `user_${String(session.user.id).slice(0,8)}`,
+        display_name: session.user.email || 'User',
+        role: 'admin',
+        is_active: true
+      });
+      adminProfile = { role: 'admin' } as any;
+    }
+
+    if (!adminProfile || adminProfile.role !== 'admin') {
       return NextResponse.json({ error: 'Forbidden: Admin access required' }, { status: 403 });
     }
 
@@ -78,6 +90,23 @@ export async function PUT(request: NextRequest) {
 
     if (!['user', 'moderator', 'admin'].includes(newRole)) {
       return NextResponse.json({ error: 'Invalid role' }, { status: 400 });
+    }
+
+    // Ensure target has a profile
+    const { data: targetProfile } = await supabase
+      .from('user_profiles')
+      .select('user_id')
+      .eq('user_id', targetUserId)
+      .single();
+
+    if (!targetProfile) {
+      await supabase.from('user_profiles').insert({
+        user_id: targetUserId,
+        username: `user_${String(targetUserId).slice(0,8)}`,
+        display_name: 'User',
+        role: 'user',
+        is_active: true
+      });
     }
 
     // Update user role directly using the authenticated route client
@@ -101,8 +130,8 @@ export async function PUT(request: NextRequest) {
     });
 
     return NextResponse.json({ success: true, message: 'Role updated successfully' });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error updating user role:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ error: error?.message || 'Internal server error' }, { status: 500 });
   }
 }

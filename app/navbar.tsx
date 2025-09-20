@@ -186,16 +186,28 @@ export function Navbar() {
                                         Create Poll
                                     </Link>
                                     {isAdmin && (
-                                        <Link
-                                            href="/admin"
-                                            className="flex items-center text-sm font-medium text-foreground/70 hover:text-foreground transition-colors py-2"
-                                            onClick={() =>
-                                                setMobileMenuOpen(false)
-                                            }
-                                        >
-                                            <Shield className="w-4 h-4 mr-2" />
-                                            Admin
-                                        </Link>
+                                        <>
+                                            <Link
+                                                href="/admin"
+                                                className="flex items-center text-sm font-medium text-foreground/70 hover:text-foreground transition-colors py-2"
+                                                onClick={() =>
+                                                    setMobileMenuOpen(false)
+                                                }
+                                            >
+                                                <Shield className="w-4 h-4 mr-2" />
+                                                Admin
+                                            </Link>
+                                            <Link
+                                                href="/admin/polls"
+                                                className="flex items-center text-sm font-medium text-foreground/70 hover:text-foreground transition-colors py-2"
+                                                onClick={() =>
+                                                    setMobileMenuOpen(false)
+                                                }
+                                            >
+                                                <BarChart3 className="w-4 h-4 mr-2" />
+                                                All Polls
+                                            </Link>
+                                        </>
                                     )}
                                 </>
                             )}

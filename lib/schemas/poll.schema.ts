@@ -1,16 +1,9 @@
 import { z } from 'zod';
 
 export const programmingLanguages = [
-  'Python',
-  'Java',
-  'JavaScript',
-  'R',
-  'C/C++',
-  'C#',
-  'Objective C',
-  'Swift',
-  'PHP',
-  'Matlab'
+  'Python', 'JavaScript', 'TypeScript', 'Java', 'C#', 'C', 'C++', 'Go', 'Rust', 'PHP', 'Ruby',
+  'Swift', 'Kotlin', 'Objective-C', 'Scala', 'Dart', 'R', 'SQL', 'HTML/CSS', 'Shell', 'PowerShell',
+  'Elixir', 'Erlang', 'Haskell', 'Clojure', 'Lua', 'Perl', 'MATLAB', 'Solidity'
 ] as const;
 
 export const createPollSchema = z.object({
@@ -26,7 +19,7 @@ export const createPollSchema = z.object({
     .or(z.literal('')),
   languages: z
     .array(z.enum(programmingLanguages))
-    .length(4, 'Please select exactly 4 programming languages')
+    .length(5, 'Please select exactly 5 programming languages')
     .refine((arr) => new Set(arr).size === arr.length, {
       message: 'Duplicate languages selected',
     }),

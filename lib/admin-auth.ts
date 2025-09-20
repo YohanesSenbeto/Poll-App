@@ -193,8 +193,8 @@ export async function updateUserRole(
     const supabase = getAdminClient();
     
     // Check if admin has permission to manage roles
-    const hasPermission = await hasPermission(adminId, 'roles', 'user_roles', 'manage');
-    if (!hasPermission) {
+    const canManageRoles: boolean = await hasPermission(adminId, 'roles', 'user_roles', 'manage');
+    if (!canManageRoles) {
       return { success: false, error: 'Insufficient permissions' };
     }
 

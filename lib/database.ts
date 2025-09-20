@@ -39,12 +39,6 @@ export async function createPoll({ title, description, options }: {
   try {
     const supabase = getSupabaseClient()
     const user = await checkAuthentication()
-    console.log('User authenticated:', user.id)
-    
-    // Debug: Test basic connection
-    console.log('Testing basic query...')
-    const testQuery = await supabase.from('polls').select('*').limit(1)
-    console.log('Test query result:', testQuery)
 
     const { data: poll, error: pollError } = await supabase
       .from('polls')
@@ -56,18 +50,9 @@ export async function createPoll({ title, description, options }: {
       .select()
       .single()
 
-    // Debug: Log the actual response
-    console.log('Poll insert response:', { data: poll, error: pollError })
-
     if (pollError) {
-      console.error('Poll creation error details:', {
-        message: pollError.message,
-        details: pollError.details,
-        hint: pollError.hint,
-        code: pollError.code,
-        fullError: JSON.stringify(pollError, null, 2)
-      })
-      throw new Error(`Failed to create poll: ${pollError.message || pollError.details || 'Unknown database error'}`)
+      const msg = pollError.message || pollError.details || 'Unknown database error'
+      throw new Error(`Failed to create poll: ${msg}`)
     }
 
     if (!poll) {
@@ -85,15 +70,13 @@ export async function createPoll({ title, description, options }: {
       .insert(optionsData)
 
     if (optionsError) {
-      console.error('Options creation error:', optionsError)
       // Rollback poll creation if options fail
       await supabase.from('polls').delete().eq('id', poll.id)
-      throw new Error(`Failed to create options: ${optionsError.message}`)
+      throw new Error(`Failed to create options: ${optionsError.message || 'Unknown database error'}`)
     }
 
-    // Update analytics tables using new schema
+    // Update analytics tables using new schema (best-effort only)
     try {
-      // Record poll creation in poll_analytics
       const { error: analyticsError } = await supabase
         .from('poll_analytics')
         .insert({
@@ -102,72 +85,39 @@ export async function createPoll({ title, description, options }: {
           poll_id: poll.id,
           value: 1
         });
-      
       if (analyticsError) {
-        console.warn('Failed to record poll creation analytics:', analyticsError);
+        // Ignore analytics errors
+        // console.warn('Analytics insert failed:', analyticsError)
       }
 
-      // Record language mentions
       const programmingLanguages = [
-        'javascript', 'python', 'typescript', 'java', 'csharp', 'cpp', 'go', 
-        'rust', 'php', 'ruby', 'swift', 'kotlin', 'sql', 'html-css', 'react', 
-        'vue', 'angular', 'nodejs', 'django', 'flask', 'spring', 'laravel', 'express'
-      ];
-      
+        'javascript','python','typescript','java','csharp','cpp','go','rust','php','ruby','swift','kotlin','sql','html-css','react','vue','angular','nodejs','django','flask','spring','laravel','express'
+      ]
       const lowerTitle = title.toLowerCase();
-      const lowerDescription = description?.toLowerCase() || '';
-      const mentionedLanguages: string[] = [];
-      
+      const lowerDescription = (description || '').toLowerCase();
       for (const lang of programmingLanguages) {
         if (lowerTitle.includes(lang) || lowerDescription.includes(lang)) {
-          mentionedLanguages.push(lang);
-          
-          // Record language mention
-          const { error: langError } = await supabase
+          await supabase
             .from('poll_analytics')
-            .insert({
-              metric_type: 'language_mentioned',
-              language_name: lang,
-              user_id: user.id,
-              poll_id: poll.id,
-              value: 1
-            });
-          
-          if (langError) {
-            console.warn(`Failed to record language mention for ${lang}:`, langError);
-          }
+            .insert({ metric_type: 'language_mentioned', language_name: lang, user_id: user.id, poll_id: poll.id, value: 1 })
         }
       }
 
-      // Use RPC function for daily analytics increment
-      const { error: dailyError } = await supabase.rpc('increment_daily_metrics', {
-        p_metric_type: 'poll_created'
-      });
-      
-      if (dailyError) {
-        console.warn('Failed to increment daily metrics:', dailyError);
+      const { error: incErr } = await supabase.rpc('increment_daily_metrics', { p_metric_type: 'poll_created' })
+      if (incErr) {
+        // ignore analytics errors
       }
 
-      // Increment language demand for each mentioned language
-      for (const lang of mentionedLanguages) {
-        const { error: langDemandError } = await supabase.rpc('increment_language_demand', {
-          p_language_name: lang
-        });
-        
-        if (langDemandError) {
-          console.warn(`Failed to increment language demand for ${lang}:`, langDemandError);
-        }
-      }
-
-    } catch (analyticsError) {
-      // Analytics errors should not prevent poll creation
-      console.warn('Analytics update failed:', analyticsError);
+    } catch (_) {
+      // swallow analytics failures
     }
 
     return poll
   } catch (error) {
-    console.error('Error in createPoll:', error)
-    throw error
+    // Surface clean error
+    const message = error instanceof Error ? error.message : 'Failed to create poll'
+    console.error('Error in createPoll:', message)
+    throw new Error(message)
   }
 }
 
@@ -203,10 +153,10 @@ export async function getAllPolls() {
     console.log(`Found ${pollsData.length} polls with optimized query`);
 
     // Process the data efficiently
-    const processedPolls = pollsData.map(poll => {
-      const optionsWithVotes = (poll.options || []).map(option => ({
+    const processedPolls = pollsData.map((poll: any) => {
+      const optionsWithVotes = (poll.options || []).map((option: any) => ({
         ...option,
-        votes_count: (poll.votes || []).filter(vote => vote.option_id === option.id).length
+        votes_count: (poll.votes || []).filter((vote: any) => vote.option_id === option.id).length
       }));
 
       return {
@@ -284,6 +234,23 @@ export async function voteOnPoll(pollId: string, optionId: string) {
     })
 
   if (error) throw error
+
+  // Best-effort: store latest voted option text locally for UI highlighting
+  if (typeof window !== 'undefined') {
+    try {
+      const { data: opt } = await supabase
+        .from('options')
+        .select('text')
+        .eq('id', optionId)
+        .single();
+      if (opt?.text) {
+        window.localStorage.setItem('poll-app:lastVotedOptionText', String(opt.text));
+        window.localStorage.setItem('poll-app:lastVotedAt', new Date().toISOString());
+      }
+    } catch {
+      // ignore local cache failures
+    }
+  }
 
   // Update analytics tables
   try {
@@ -554,5 +521,70 @@ export async function getGlobalStats() {
     total_polls: polls?.length || 0,
     total_votes: votes?.length || 0,
     average_votes: polls?.length ? (votes?.length || 0) / polls.length : 0
+  }
+}
+
+export async function getPollsSummary(limit: number = 24, userId?: string) {
+  const supabase = getSupabaseClient();
+
+  let base = supabase
+    .from('polls')
+    .select('id, title, description, user_id, is_active, created_at')
+    .order('created_at', { ascending: false })
+    .limit(limit);
+
+  // Respect RLS: show active polls or the user's own polls
+  if (userId) {
+    base = base.or(`is_active.eq.true,user_id.eq.${userId}`);
+  } else {
+    base = base.eq('is_active', true);
+  }
+
+  const [pollsRes, statsRes] = await Promise.all([
+    base,
+    supabase
+      .from('poll_statistics')
+      .select('poll_id, total_votes, option_count')
+  ]);
+
+  const polls = pollsRes.data || [];
+  const pollsError = pollsRes.error;
+  const stats = statsRes.data || [];
+
+  if (pollsError && polls.length === 0) {
+    // Silent fallback to empty to avoid noisy console in production
+    return [] as any[];
+  }
+
+  const statsMap = new Map<string, { total_votes: number; option_count: number }>();
+  (stats || []).forEach((s: any) => statsMap.set(s.poll_id, { total_votes: s.total_votes, option_count: s.option_count }));
+
+  return polls.map((p: any) => {
+    const s = statsMap.get(p.id) || { total_votes: 0, option_count: 0 };
+    return {
+      ...p,
+      total_votes: s.total_votes,
+      option_count: s.option_count,
+    };
+  });
+}
+
+export async function getLanguageCatalog(): Promise<string[]> {
+  const supabase = getSupabaseClient();
+  try {
+    const { data, error } = await supabase
+      .from('language_catalog')
+      .select('name')
+      .order('name');
+
+    if (error) {
+      console.warn('getLanguageCatalog error:', error);
+      return [];
+    }
+
+    return (data || []).map((r: any) => r.name).filter((n: any) => typeof n === 'string' && n.trim().length > 0);
+  } catch (e) {
+    console.warn('getLanguageCatalog exception:', e);
+    return [];
   }
 }

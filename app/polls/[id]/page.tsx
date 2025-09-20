@@ -28,6 +28,7 @@ function PollView() {
     const [loading, setLoading] = useState(true);
     const [voting, setVoting] = useState(false);
     const [userVoted, setUserVoted] = useState(false);
+    const [myOptionId, setMyOptionId] = useState<string | null>(null);
     const [results, setResults] = useState<any>(null);
     const [user, setUser] = useState<any>(null);
     const [isOwner, setIsOwner] = useState(false);
@@ -47,9 +48,21 @@ function PollView() {
 
                 if (currentUser) {
                     const voted = await hasUserVoted(pollId, currentUser.id);
-                    setUserVoted(voted);
+                    setUserVoted(!!voted);
 
-                    // Check if current user is the owner
+                    // Fetch which option the user voted for (if any)
+                    if (voted) {
+                        const { data: myVote } = await supabase
+                            .from('votes')
+                            .select('option_id')
+                            .eq('poll_id', pollId)
+                            .eq('user_id', currentUser.id)
+                            .single();
+                        setMyOptionId(myVote?.option_id || null);
+                    } else {
+                        setMyOptionId(null);
+                    }
+
                     if (pollData && pollData.user_id === currentUser.id) {
                         setIsOwner(true);
                     }
@@ -74,7 +87,6 @@ function PollView() {
         try {
             await voteOnPoll(pollId, selectedOption);
 
-            // Refresh data
             const [updatedPoll, updatedResults, voted] = await Promise.all([
                 getPollById(pollId),
                 getPollResults(pollId),
@@ -83,39 +95,20 @@ function PollView() {
 
             setPoll(updatedPoll);
             setResults(updatedResults);
-            setUserVoted(voted);
+            setUserVoted(!!voted);
             setSelectedOption("");
+            // Refresh which option id the user voted for
+            if (voted) {
+                const { data: myVote } = await supabase
+                    .from('votes')
+                    .select('option_id')
+                    .eq('poll_id', pollId)
+                    .eq('user_id', user.id)
+                    .single();
+                setMyOptionId(myVote?.option_id || null);
+            }
         } catch (error: any) {
             console.error("Error voting:", error);
-            
-            // Better error handling for duplicate votes
-            if (error.message?.includes("already voted")) {
-                notificationManager.addNotification({
-                    type: "warning",
-                    title: "Already Voted",
-                    message: `You have already voted on this poll with your email (${user?.email}). You can only vote once per poll.`,
-                    duration: 5000,
-                });
-                
-                // Refresh to show current results
-                const [updatedPoll, updatedResults, voted] = await Promise.all([
-                    getPollById(pollId),
-                    getPollResults(pollId),
-                    hasUserVoted(pollId, user.id),
-                ]);
-                
-                setPoll(updatedPoll);
-                setResults(updatedResults);
-                setUserVoted(voted);
-                
-            } else {
-                notificationManager.addNotification({
-                    type: "error",
-                    title: "Vote Failed",
-                    message: error.message || "Failed to submit vote. Please try again.",
-                    duration: 5000,
-                });
-            }
         } finally {
             setVoting(false);
         }
@@ -136,13 +129,8 @@ function PollView() {
             <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 py-8">
                 <Card className="bg-card">
                     <CardContent className="text-left py-12">
-                        <h2 className="text-2xl font-bold mb-2 text-foreground">
-                            Poll Not Found
-                        </h2>
-                        <p className="text-muted-foreground mb-4">
-                            The poll you're looking for doesn't exist or has
-                            been removed.
-                        </p>
+                        <h2 className="text-2xl font-bold mb-2 text-foreground">Poll Not Found</h2>
+                        <p className="text-muted-foreground mb-4">The poll you're looking for doesn't exist or has been removed.</p>
                         <Button asChild>
                             <Link href="/polls">Back to Polls</Link>
                         </Button>
@@ -152,7 +140,12 @@ function PollView() {
         );
     }
 
-    const totalVotes = results?.total_votes || 0;
+    // Derive total votes from results if available
+    const totalVotes = Array.isArray(results)
+        ? results.reduce((sum: number, r: any) => sum + (r.vote_count || 0), 0)
+        : results?.total_votes || 0;
+
+    const canSeeResults = isOwner || userVoted;
 
     return (
         <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 py-8">
@@ -166,9 +159,7 @@ function PollView() {
             <Card className="bg-card max-w-2xl">
                 <CardHeader>
                     <div className="flex items-center justify-between">
-                        <CardTitle className="text-2xl text-foreground">
-                            {poll.title}
-                        </CardTitle>
+                        <CardTitle className="text-2xl text-foreground">{poll.title}</CardTitle>
                         <div className="flex items-center gap-2">
                             {userVoted && (
                                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300">
@@ -176,16 +167,6 @@ function PollView() {
                                     Voted
                                 </span>
                             )}
-                            // Change this line (around line 150-160):
-                            {isOwner && (
-                                <Button asChild variant="outline" size="sm">
-                                    <Link href={`/polls/${pollId}/edit`}>
-                                        <Edit className="h-4 w-4 mr-1" />
-                                        Edit
-                                    </Link>
-                                </Button>
-                            )}
-                            // To this (allow editing always for owner):
                             {isOwner && (
                                 <Button asChild variant="outline" size="sm">
                                     <Link href={`/polls/${pollId}/edit`}>
@@ -196,103 +177,61 @@ function PollView() {
                             )}
                         </div>
                     </div>
-                    {poll.description && (
-                        <p className="text-muted-foreground">
-                            {poll.description}
-                        </p>
-                    )}
+                    {poll.description && <p className="text-muted-foreground">{poll.description}</p>}
                     <div className="flex items-center gap-4 text-sm text-muted-foreground">
                         <span className="flex items-center">
                             <Clock className="h-4 w-4 mr-1" />
                             {new Date(poll.created_at).toLocaleDateString()}
                         </span>
-                        <span className="flex items-center">
-                            <Users className="h-4 w-4 mr-1" />
-                            {totalVotes} {totalVotes === 1 ? "vote" : "votes"}
-                        </span>
+                        {canSeeResults && (
+                            <span className="flex items-center">
+                                <Users className="h-4 w-4 mr-1" />
+                                {totalVotes} {totalVotes === 1 ? "vote" : "votes"}
+                            </span>
+                        )}
                     </div>
                 </CardHeader>
                 <CardContent>
-                    {userVoted || results ? (
-                        // Show results
+                    {canSeeResults ? (
                         <div className="space-y-4">
                             <h3 className="font-semibold">Results</h3>
                             {poll.options?.map((option: any) => {
-                                const optionVotes =
-                                    results?.option_votes?.find(
-                                        (ov: any) => ov.option_id === option.id
-                                    )?.votes || 0;
-                                const percentage =
-                                    totalVotes > 0
-                                        ? Math.round(
-                                              (optionVotes / totalVotes) * 100
-                                          )
-                                        : 0;
+                                // Support results shape from RPC returning rows with option_id/vote_count
+                                const optionRow = Array.isArray(results)
+                                    ? results.find((r: any) => r.option_id === option.id)
+                                    : null;
+                                const optionVotes = optionRow?.vote_count || 0;
+                                const percentage = totalVotes > 0 ? Math.round((optionVotes / totalVotes) * 100) : 0;
 
                                 return (
                                     <div key={option.id} className="space-y-2">
                                         <div className="flex justify-between items-center">
-                                            <span className="font-medium text-foreground">
-                                                {option.text}
-                                            </span>
+                                            <span className="font-medium text-foreground">{option.text}</span>
                                             <span className="text-sm text-muted-foreground">
-                                                {optionVotes} ({percentage}%)
+                                                {isOwner ? `${optionVotes} (${percentage}%)` : `${percentage}%`}
                                             </span>
                                         </div>
                                         <Progress
                                             value={percentage}
-                                            className="h-2"
+                                            className={`h-2 ${myOptionId === option.id ? 'bg-green-200' : ''}`}
+                                            indicatorClassName={myOptionId === option.id ? 'bg-green-600' : undefined}
                                         />
                                     </div>
                                 );
                             })}
                         </div>
                     ) : (
-                        // Show voting form
                         <div className="space-y-4">
                             <h3 className="font-semibold">Cast Your Vote</h3>
-                            <RadioGroup
-                                value={selectedOption}
-                                onValueChange={setSelectedOption}
-                                className="space-y-3"
-                            >
+                            <RadioGroup value={selectedOption} onValueChange={setSelectedOption} className="space-y-3">
                                 {poll.options?.map((option: any) => (
-                                    <div
-                                        key={option.id}
-                                        className="flex items-center space-x-2"
-                                    >
-                                        <RadioGroupItem
-                                            value={option.id}
-                                            id={option.id}
-                                        />
-                                        <Label
-                                            htmlFor={option.id}
-                                            className="cursor-pointer"
-                                        >
-                                            {option.text}
-                                        </Label>
+                                    <div key={option.id} className="flex items-center space-x-2">
+                                        <RadioGroupItem value={option.id} id={option.id} />
+                                        <Label htmlFor={option.id} className="cursor-pointer">{option.text}</Label>
                                     </div>
                                 ))}
                             </RadioGroup>
-
-                            {!user && (
-                                <p className="text-sm text-muted-foreground">
-                                    Please{" "}
-                                    <Link
-                                        href="/auth/login"
-                                        className="text-blue-600 hover:underline"
-                                    >
-                                        sign in
-                                    </Link>{" "}
-                                    to vote.
-                                </p>
-                            )}
-
-                            <Button
-                                onClick={handleVote}
-                                disabled={!selectedOption || !user || voting}
-                                className="w-full"
-                            >
+                            <Button onClick={handleVote} disabled={!selectedOption || !user || voting} className="w-full">
                                 {voting ? "Submitting..." : "Submit Vote"}
                             </Button>
                         </div>

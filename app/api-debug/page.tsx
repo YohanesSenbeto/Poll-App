@@ -45,7 +45,8 @@ export default function APIDebug() {
             });
 
         } catch (error) {
-            setDebugInfo({ error: error.toString() });
+            const message = error instanceof Error ? error.message : String(error);
+            setDebugInfo({ error: message });
         } finally {
             setLoading(false);
         }

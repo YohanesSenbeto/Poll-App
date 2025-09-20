@@ -24,7 +24,7 @@ export default function AdminNavbar() {
 
     const navItems = [
         { href: "/admin", icon: Home, label: "Dashboard" },
-        { href: "/admin/polls", icon: BarChart3, label: "Polls" },
+        { href: "/admin/polls", icon: BarChart3, label: "All Polls" },
         { href: "/admin/users", icon: Users, label: "Users" },
         { href: "/admin/settings", icon: Settings, label: "Settings" },
     ];

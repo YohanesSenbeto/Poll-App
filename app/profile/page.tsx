@@ -40,6 +40,8 @@ interface UserProfile {
     updated_at: string;
 }
 
+interface LangAggRow { name: string; pct: number; count: number }
+
 export default function ProfilePage() {
     const { user, loading } = useAuth();
     const router = useRouter();
@@ -64,6 +66,8 @@ export default function ProfilePage() {
     const [avatarFile, setAvatarFile] = useState<File | null>(null);
     const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
 
+    const [myLangAgg, setMyLangAgg] = useState<LangAggRow[]>([]);
+
     useEffect(() => {
         if (!loading && !user) {
             router.push("/auth/login");
@@ -76,6 +80,51 @@ export default function ProfilePage() {
             checkStorageStatus();
         }
     }, [user]);
+
+    useEffect(() => {
+        const fetchMyVotesAgg = async () => {
+            try {
+                if (!user?.id) return;
+                // 1) Fetch user's votes (all time)
+                const { data: myVotes, error: votesError } = await supabase
+                    .from('votes')
+                    .select('option_id')
+                    .eq('user_id', user.id);
+                if (votesError || !myVotes || myVotes.length === 0) {
+                    setMyLangAgg([]);
+                    return;
+                }
+                const optionIds = Array.from(new Set(myVotes.map(v => v.option_id).filter(Boolean)));
+                // 2) Map option id -> text (language)
+                const { data: optionsRows, error: optsError } = await supabase
+                    .from('options')
+                    .select('id, text')
+                    .in('id', optionIds);
+                if (optsError || !optionsRows) {
+                    setMyLangAgg([]);
+                    return;
+                }
+                const idToText = new Map<string, string>();
+                optionsRows.forEach((o: any) => { if (o?.id && o?.text) idToText.set(o.id, o.text); });
+                // 3) Aggregate counts
+                const langToCount = new Map<string, number>();
+                let total = 0;
+                for (const v of myVotes) {
+                    const name = idToText.get(v.option_id);
+                    if (!name) continue;
+                    langToCount.set(name, (langToCount.get(name) || 0) + 1);
+                    total += 1;
+                }
+                const rows: LangAggRow[] = Array.from(langToCount.entries())
+                    .map(([name, count]) => ({ name, count, pct: total > 0 ? Math.round((count / total) * 100) : 0 }))
+                    .sort((a, b) => b.count - a.count);
+                setMyLangAgg(rows);
+            } catch {
+                setMyLangAgg([]);
+            }
+        };
+        fetchMyVotesAgg();
+    }, [user?.id]);
 
     const checkStorageStatus = async () => {
         try {
@@ -492,6 +541,31 @@ export default function ProfilePage() {
                             Manage your account settings and preferences
                         </p>
                     </div>
+
+                    {/* My Voting Distribution */}
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>My Voting Distribution</CardTitle>
+                            <CardDescription>Languages you have voted for (all time)</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            {myLangAgg.length === 0 ? (
+                                <p className="text-sm text-muted-foreground">You haven't voted yet.</p>
+                            ) : (
+                                <div className="divide-y border rounded">
+                                    {myLangAgg.map((row) => (
+                                        <div key={row.name} className="p-2">
+                                            <div className="flex justify-between mb-1 text-sm">
+                                                <span className="text-foreground">{row.name}</span>
+                                                <span className="text-muted-foreground">{row.count} ({row.pct}%)</span>
+                                            </div>
+                                            <Progress value={row.pct} className="h-2" />
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
 
                     {error && (
                         <Alert variant="destructive">
