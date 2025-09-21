@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, memo } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/app/auth-context";
 import { supabase } from "@/lib/supabase";
@@ -28,6 +28,104 @@ import {
     Eye,
     EyeOff,
 } from "lucide-react";
+import {
+  PieChart,
+  Pie,
+  Cell,
+  ResponsiveContainer,
+  Legend,
+  Tooltip
+} from 'recharts';
+
+// Custom colors for the pie chart
+const COLORS = ['#8884d8', '#82ca9d', '#ffc658', '#ff7c7c', '#8dd1e1', '#d084d0', '#87ceeb', '#dda0dd', '#98fb98', '#f0e68c'];
+
+// User Voting Distribution Chart Component (Memoized)
+const VotingDistributionChart = memo(function VotingDistributionChart({ data }: { data: LangAggRow[] }) {
+    // Memoize chart data to prevent unnecessary recalculations
+    const chartData = useMemo(() => {
+        if (!data || data.length === 0) return [];
+
+        return data.map((item, index) => ({
+            name: item.name,
+            value: item.count,
+            percentage: item.pct,
+            color: COLORS[index % COLORS.length],
+        }));
+    }, [data]);
+
+    if (chartData.length === 0) {
+        return (
+            <div className="h-64 flex items-center justify-center text-muted-foreground">
+                No voting data to display
+            </div>
+        );
+    }
+
+    const renderCustomizedLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent }: any) => {
+        const RADIAN = Math.PI / 180;
+        const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
+        const x = cx + radius * Math.cos(-midAngle * RADIAN);
+        const y = cy + radius * Math.sin(-midAngle * RADIAN);
+
+        return (
+            <text
+                x={x}
+                y={y}
+                fill="white"
+                textAnchor={x > cx ? 'start' : 'end'}
+                dominantBaseline="central"
+                fontSize="12"
+                fontWeight="bold"
+            >
+                {`${(percent * 100).toFixed(0)}%`}
+            </text>
+        );
+    };
+
+    return (
+        <div className="w-full h-80">
+            <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                    <Pie
+                        data={chartData}
+                        cx="50%"
+                        cy="50%"
+                        labelLine={false}
+                        label={renderCustomizedLabel}
+                        outerRadius={100}
+                        fill="#8884d8"
+                        dataKey="value"
+                    >
+                        {chartData.map((entry: any, index: number) => (
+                            <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                    </Pie>
+                    <Tooltip
+                        formatter={(value: number, name: string, props: any) => [
+                            `${value} votes (${props.payload?.percentage}%)`,
+                            'Votes'
+                        ]}
+                        contentStyle={{
+                            backgroundColor: 'hsl(var(--background))',
+                            border: '1px solid hsl(var(--border))',
+                            borderRadius: '6px'
+                        }}
+                    />
+                    <Legend
+                        verticalAlign="bottom"
+                        height={36}
+                        formatter={(value: string, entry: any) => (
+                            <span style={{ color: entry.color }}>
+                                {value}
+                            </span>
+                        )}
+                    />
+                </PieChart>
+            </ResponsiveContainer>
+        </div>
+    );
+});
 
 interface UserProfile {
     id: string;
@@ -552,16 +650,49 @@ export default function ProfilePage() {
                             {myLangAgg.length === 0 ? (
                                 <p className="text-sm text-muted-foreground">You haven't voted yet.</p>
                             ) : (
-                                <div className="divide-y border rounded">
-                                    {myLangAgg.map((row) => (
-                                        <div key={row.name} className="p-2">
-                                            <div className="flex justify-between mb-1 text-sm">
-                                                <span className="text-foreground">{row.name}</span>
-                                                <span className="text-muted-foreground">{row.count} ({row.pct}%)</span>
-                                            </div>
-                                            <Progress value={row.pct} className="h-2" />
+                                <div className="space-y-6">
+                                    {/* Chart Visualization */}
+                                    <div className="bg-card border rounded-lg p-4">
+                                        <div
+                                            role="img"
+                                            aria-label={`Pie chart showing your voting distribution across ${myLangAgg.length} programming languages`}
+                                        >
+                                            <VotingDistributionChart data={myLangAgg} />
                                         </div>
-                                    ))}
+                                        {myLangAgg.length > 0 && (
+                                            <p className="sr-only">
+                                                Your voting distribution: {
+                                                    myLangAgg.map((item, index) =>
+                                                        `${item.name}: ${item.count} votes (${item.pct}%)${index < myLangAgg.length - 1 ? ', ' : ''}`
+                                                    ).join('')
+                                                }
+                                            </p>
+                                        )}
+                                    </div>
+
+                                    {/* Detailed Breakdown */}
+                                    <div className="space-y-3">
+                                        <h4 className="text-sm font-medium text-muted-foreground">Vote Breakdown</h4>
+                                        <div className="divide-y border rounded">
+                                            {myLangAgg.map((row, index) => (
+                                                <div key={row.name} className="p-3">
+                                                    <div className="flex justify-between items-center mb-2">
+                                                        <div className="flex items-center space-x-3">
+                                                            <div
+                                                                className="w-4 h-4 rounded-full"
+                                                                style={{ backgroundColor: COLORS[index % COLORS.length] }}
+                                                            />
+                                                            <span className="font-medium text-foreground">{row.name}</span>
+                                                        </div>
+                                                        <span className="text-sm font-medium text-muted-foreground">
+                                                            {row.count} {row.count === 1 ? 'vote' : 'votes'} ({row.pct}%)
+                                                        </span>
+                                                    </div>
+                                                    <Progress value={row.pct} className="h-2" />
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
                                 </div>
                             )}
                         </CardContent>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, memo } from "react";
 import { useAuth } from "../auth-context";
 import { supabase } from "@/lib/supabase";
 import {
@@ -27,6 +27,75 @@ import {
     Calendar,
 } from "lucide-react";
 import { format } from "date-fns";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Legend
+} from 'recharts';
+
+// Daily Trends Chart Component (Memoized)
+const DailyTrendsChart = memo(function DailyTrendsChart({ pollStats, voteStats }: {
+    pollStats: Array<{ date: string; total_value: number }>,
+    voteStats: Array<{ date: string; total_value: number }>
+}) {
+    // Memoize chart data to prevent unnecessary recalculations
+    const chartData = useMemo(() => {
+        return pollStats.map((pollStat) => {
+            const voteStat = voteStats.find(vote => vote.date === pollStat.date);
+            return {
+                date: format(new Date(pollStat.date), "MMM d"),
+                polls: pollStat.total_value,
+                votes: voteStat?.total_value || 0,
+            };
+        });
+    }, [pollStats, voteStats]);
+
+    return (
+        <div className="w-full h-64">
+            <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={chartData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                    <XAxis
+                        dataKey="date"
+                        tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }}
+                    />
+                    <YAxis tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }} />
+                    <Tooltip
+                        contentStyle={{
+                            backgroundColor: 'hsl(var(--background))',
+                            border: '1px solid hsl(var(--border))',
+                            borderRadius: '6px'
+                        }}
+                        formatter={(value: number, name: string) => [
+                            `${value} ${name}`,
+                            name.charAt(0).toUpperCase() + name.slice(1)
+                        ]}
+                    />
+                    <Legend />
+                    <Line
+                        type="monotone"
+                        dataKey="polls"
+                        stroke="#8884d8"
+                        strokeWidth={2}
+                        name="Polls Created"
+                    />
+                    <Line
+                        type="monotone"
+                        dataKey="votes"
+                        stroke="#82ca9d"
+                        strokeWidth={2}
+                        name="Votes Cast"
+                    />
+                </LineChart>
+            </ResponsiveContainer>
+        </div>
+    );
+});
 
 interface Poll {
     id: string;
@@ -746,43 +815,78 @@ export default function AdminDashboard() {
                             <CardHeader>
                                 <CardTitle className="text-slate-100 flex items-center gap-2">
                                     <Calendar className="w-5 h-5" />
-                                    Daily Activity
+                                    Daily Activity Trends
                                 </CardTitle>
                                 <CardDescription className="text-slate-400">
-                                    Poll creation trends over the last 7 days
+                                    Poll creation and voting activity over the last 7 days
                                 </CardDescription>
                             </CardHeader>
                             <CardContent>
-                                {analytics?.daily_poll_stats &&
-                                analytics.daily_poll_stats.length > 0 ? (
-                                    <div className="space-y-2">
-                                        {analytics.daily_poll_stats.map(
-                                            (stat) => (
-                                                <div
-                                                    key={stat.date}
-                                                    className="flex justify-between items-center"
-                                                >
-                                                    <span className="text-sm text-slate-300">
-                                                        {format(
-                                                            new Date(stat.date),
-                                                            "MMM d"
-                                                        )}
-                                                    </span>
-                                                    <Badge
-                                                        variant="outline"
-                                                        className="text-xs"
-                                                    >
-                                                        {stat.total_value} polls
-                                                    </Badge>
-                                                </div>
-                                            )
+                                <div className="space-y-4">
+                                    {/* Chart Visualization */}
+                                    <div className="bg-slate-900/50 border border-slate-700 rounded-lg p-4">
+                                        <div
+                                            role="img"
+                                            aria-label={`Line chart showing daily activity trends over the last 7 days, comparing poll creation and voting activity`}
+                                        >
+                                            <DailyTrendsChart
+                                                pollStats={analytics?.daily_poll_stats || []}
+                                                voteStats={analytics?.daily_vote_stats || []}
+                                            />
+                                        </div>
+                                        {(analytics?.daily_poll_stats?.length || 0) > 0 && (
+                                            <p className="sr-only">
+                                                Daily activity data: {
+                                                    (analytics?.daily_poll_stats || []).map((stat, index) => {
+                                                        const voteStat = analytics?.daily_vote_stats?.find(
+                                                            vote => vote.date === stat.date
+                                                        );
+                                                        return `${format(new Date(stat.date), "MMM d")}: ${stat.total_value} polls, ${voteStat?.total_value || 0} votes${index < (analytics?.daily_poll_stats?.length || 0) - 1 ? ', ' : ''}`;
+                                                    }).join('')
+                                                }
+                                            </p>
                                         )}
                                     </div>
-                                ) : (
-                                    <p className="text-sm text-slate-400">
-                                        No daily data available
-                                    </p>
-                                )}
+
+                                    {/* Detailed Breakdown */}
+                                    <div className="space-y-3">
+                                        <h4 className="text-sm font-medium text-slate-300">Recent Activity</h4>
+                                        {analytics?.daily_poll_stats &&
+                                        analytics.daily_poll_stats.length > 0 ? (
+                                            <div className="space-y-2">
+                                                {analytics.daily_poll_stats.map((stat) => {
+                                                    const voteStat = analytics.daily_vote_stats?.find(
+                                                        vote => vote.date === stat.date
+                                                    );
+                                                    return (
+                                                        <div
+                                                            key={stat.date}
+                                                            className="flex justify-between items-center p-2 bg-slate-900/30 rounded"
+                                                        >
+                                                            <span className="text-sm text-slate-300">
+                                                                {format(new Date(stat.date), "MMM d")}
+                                                            </span>
+                                                            <div className="flex gap-3">
+                                                                <Badge variant="outline" className="text-xs">
+                                                                    {stat.total_value} polls
+                                                                </Badge>
+                                                                {voteStat && (
+                                                                    <Badge variant="secondary" className="text-xs">
+                                                                        {voteStat.total_value} votes
+                                                                    </Badge>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        ) : (
+                                            <p className="text-sm text-slate-400">
+                                                No daily data available
+                                            </p>
+                                        )}
+                                    </div>
+                                </div>
                             </CardContent>
                         </Card>
 

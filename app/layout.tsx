@@ -17,6 +17,22 @@ const geistMono = Geist_Mono({
     subsets: ["latin"],
 });
 
+// Skip Links Component
+function SkipLinks() {
+    return (
+        <div className="sr-only focus-within:not-sr-only focus-within:absolute focus-within:top-0 focus-within:left-0 focus-within:z-50">
+            <div className="bg-background border border-border rounded-md p-2 shadow-lg">
+                <a
+                    href="#main-content"
+                    className="block px-4 py-2 text-sm font-medium bg-primary text-primary-foreground rounded hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                >
+                    Skip to main content
+                </a>
+            </div>
+        </div>
+    );
+}
+
 export const metadata: Metadata = {
     title: "Poll App",
     description: "Create and vote on polls",
@@ -38,11 +54,12 @@ export default function RootLayout({
             <body
                 className={`${geistSans.variable} ${geistMono.variable} antialiased overflow-x-hidden`}
             >
+                <SkipLinks />
                 <ThemeProvider>
                     <AuthProvider>
                         <Navbar />
                         <NotificationContainer />
-                        <main className="w-full max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 py-3 sm:py-4 md:py-6 lg:py-8 min-h-[calc(100vh-200px)]">
+                        <main id="main-content" className="w-full max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 py-3 sm:py-4 md:py-6 lg:py-8 min-h-[calc(100vh-200px)]">
                             {children}
                         </main>
                         <Footer />

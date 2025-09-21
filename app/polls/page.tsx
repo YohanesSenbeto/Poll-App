@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useMemo, memo } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -8,6 +8,93 @@ import { getPollById, getPollResults, getUserPolls, deletePoll } from "@/lib/dat
 import { useAuth } from "@/app/auth-context";
 import { useRouter } from "next/navigation";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Cell
+} from 'recharts';
+
+// Custom colors for the aggregated chart
+const COLORS = ['#8884d8', '#82ca9d', '#ffc658', '#ff7c7c', '#8dd1e1', '#d084d0', '#87ceeb', '#dda0dd', '#98fb98', '#f0e68c'];
+
+// Aggregated Language Chart Component (Memoized)
+const AggregatedLanguageChart = memo(function AggregatedLanguageChart({ data, userLangs }: {
+    data: Array<{ name: string; pct: number }>,
+    userLangs: Set<string>
+}) {
+    // Memoize chart data to prevent unnecessary recalculations
+    const chartData = useMemo(() => {
+        if (!data || data.length === 0) return [];
+
+        return data.map((item, index) => ({
+            name: item.name,
+            percentage: item.pct,
+            votes: Math.round((item.pct / 100) * 100), // Approximate vote count for display
+            isUserVote: userLangs.has(String(item.name).trim().toLowerCase()),
+            color: COLORS[index % COLORS.length],
+        }));
+    }, [data, userLangs]);
+
+    if (chartData.length === 0) {
+        return (
+            <div className="h-64 flex items-center justify-center text-muted-foreground">
+                No data to display
+            </div>
+        );
+    }
+
+    return (
+        <div className="w-full h-64">
+            <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                    data={chartData}
+                    margin={{
+                        top: 5,
+                        right: 30,
+                        left: 20,
+                        bottom: 5,
+                    }}
+                >
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis
+                        dataKey="name"
+                        tick={{ fontSize: 10 }}
+                        angle={-45}
+                        textAnchor="end"
+                        height={80}
+                        interval={0}
+                    />
+                    <YAxis tick={{ fontSize: 12 }} />
+                    <Tooltip
+                        formatter={(value: number, name: string, props: any) => [
+                            `${value}%`,
+                            'Percentage'
+                        ]}
+                        labelFormatter={(label) => `Language: ${label}`}
+                        contentStyle={{
+                            backgroundColor: 'hsl(var(--background))',
+                            border: '1px solid hsl(var(--border))',
+                            borderRadius: '6px'
+                        }}
+                    />
+                    <Bar dataKey="percentage" radius={[4, 4, 0, 0]}>
+                        {chartData.map((entry: any, index: number) => (
+                            <Cell
+                                key={`cell-${index}`}
+                                fill={entry.isUserVote ? '#22c55e' : entry.color}
+                            />
+                        ))}
+                    </Bar>
+                </BarChart>
+            </ResponsiveContainer>
+        </div>
+    );
+});
 
 export default function PollsPage() {
     const [polls, setPolls] = useState<any[]>([]);
@@ -316,25 +403,62 @@ export default function PollsPage() {
 
                 <Card>
                         <CardContent className="p-4">
-                        <div className="divide-y border rounded">
-                            {langAgg.map((row) => {
-                                const mine = user && userLangs.has(String(row.name).trim().toLowerCase());
-                                return (
-                                <div key={row.name} className="p-2">
-                                    <div className="flex justify-between mb-1 text-sm">
-                                        <span className="text-foreground">{row.name}</span>
-                                        <span className="text-muted-foreground">{row.pct}%</span>
+                            <div className="space-y-4">
+                                {/* Chart Visualization */}
+                                <div className="bg-card border rounded-lg p-4">
+                                    <h3 className="text-lg font-semibold mb-3 text-foreground">
+                                        Programming Language Popularity
+                                    </h3>
+                                    <div
+                                        role="img"
+                                        aria-label={`Bar chart showing programming language popularity. ${langAgg.length} languages displayed.`}
+                                    >
+                                        <AggregatedLanguageChart data={langAgg} userLangs={userLangs} />
+                                    </div>
+                                    {langAgg.length > 0 && (
+                                        <p className="sr-only">
+                                            Chart data: {
+                                                langAgg.map((item, index) =>
+                                                    `${item.name}: ${item.pct}%${index < langAgg.length - 1 ? ', ' : ''}`
+                                                ).join('')
+                                            }
+                                        </p>
+                                    )}
                                 </div>
-                                    <div className={`h-2 w-full rounded-full overflow-hidden ${mine ? 'bg-green-200' : 'bg-primary/20'}`}>
-                                        <div className={`${mine ? 'bg-green-600' : 'bg-primary'} h-full transition-all`} style={{ width: `${row.pct}%` }} />
+
+                                {/* Detailed Breakdown Table */}
+                                <div className="space-y-2">
+                                    <h4 className="text-sm font-medium text-muted-foreground">Detailed Breakdown</h4>
+                                    <div className="divide-y border rounded">
+                                        {langAgg.map((row) => {
+                                            const mine = user && userLangs.has(String(row.name).trim().toLowerCase());
+                                            return (
+                                                <div key={row.name} className={`p-3 ${mine ? 'bg-green-50 dark:bg-green-950/20' : ''}`}>
+                                                    <div className="flex justify-between items-center mb-1">
+                                                        <div className="flex items-center space-x-2">
+                                                            <span className="font-medium text-foreground">{row.name}</span>
+                                                            {mine && (
+                                                                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300">
+                                                                    Your Vote
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        <span className="text-sm font-medium text-muted-foreground">{row.pct}%</span>
+                                                    </div>
+                                                    <div className={`h-2 w-full rounded-full overflow-hidden ${mine ? 'bg-green-200' : 'bg-primary/20'}`}>
+                                                        <div className={`${mine ? 'bg-green-600' : 'bg-primary'} h-full transition-all`} style={{ width: `${row.pct}%` }} />
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                        {langAgg.length === 0 && (
+                                            <div className="p-4 text-sm text-muted-foreground text-center">
+                                                No votes in this range
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
                             </div>
-                                </div>
-                                );
-                            })}
-                            {langAgg.length === 0 && (
-                                <div className="p-2 text-sm text-muted-foreground">No votes in this range</div>
-                            )}
-                        </div>
                         </CardContent>
                     </Card>
             </div>

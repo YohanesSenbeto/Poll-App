@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo, memo } from "react";
 import { useParams } from "next/navigation";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,96 @@ import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import Link from "next/link";
 import { ArrowLeft, CheckCircle, Clock, Users, Edit } from "lucide-react";
 import type { Poll, PollOption } from "@/lib/types";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Cell
+} from 'recharts';
+
+// Custom colors for the chart
+const COLORS = ['#8884d8', '#82ca9d', '#ffc658', '#ff7c7c', '#8dd1e1'];
+
+// Poll Results Chart Component (Memoized)
+const PollResultsChart = memo(function PollResultsChart({ results, totalVotes, myOptionId, isOwner }: {
+    results: any,
+    totalVotes: number,
+    myOptionId: string | null,
+    isOwner: boolean
+}) {
+    // Memoize chart data to prevent unnecessary recalculations
+    const chartData = useMemo(() => {
+        if (!results || totalVotes === 0) return [];
+
+        return Array.isArray(results)
+            ? results.map((result: any, index: number) => ({
+                name: result.option_text || `Option ${index + 1}`,
+                votes: result.vote_count || 0,
+                percentage: totalVotes > 0 ? Math.round((result.vote_count / totalVotes) * 100) : 0,
+                optionId: result.option_id,
+                color: COLORS[index % COLORS.length],
+              }))
+            : [];
+    }, [results, totalVotes]);
+
+    if (chartData.length === 0) {
+        return (
+            <div className="h-64 flex items-center justify-center text-muted-foreground">
+                No votes yet
+            </div>
+        );
+    }
+
+    return (
+        <div className="w-full h-64">
+            <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                    data={chartData}
+                    margin={{
+                        top: 5,
+                        right: 30,
+                        left: 20,
+                        bottom: 5,
+                    }}
+                >
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis
+                        dataKey="name"
+                        tick={{ fontSize: 12 }}
+                        angle={-45}
+                        textAnchor="end"
+                        height={80}
+                    />
+                    <YAxis tick={{ fontSize: 12 }} />
+                    <Tooltip
+                        formatter={(value: number, name: string, props: any) => [
+                            `${value} ${value === 1 ? 'vote' : 'votes'} (${props.payload?.percentage}%)`,
+                            'Votes'
+                        ]}
+                        labelFormatter={(label) => `Option: ${label}`}
+                        contentStyle={{
+                            backgroundColor: 'hsl(var(--background))',
+                            border: '1px solid hsl(var(--border))',
+                            borderRadius: '6px'
+                        }}
+                    />
+                    <Bar dataKey="votes" radius={[4, 4, 0, 0]}>
+                        {chartData.map((entry: any, index: number) => (
+                            <Cell
+                                key={`cell-${index}`}
+                                fill={entry.optionId === myOptionId ? '#22c55e' : entry.color}
+                            />
+                        ))}
+                    </Bar>
+                </BarChart>
+            </ResponsiveContainer>
+        </div>
+    );
+});
 
 function PollView() {
     const params = useParams();
@@ -193,32 +283,75 @@ function PollView() {
                 </CardHeader>
                 <CardContent>
                     {canSeeResults ? (
-                        <div className="space-y-4">
+                        <div className="space-y-6">
                             <h3 className="font-semibold">Results</h3>
-                            {poll.options?.map((option: any) => {
-                                // Support results shape from RPC returning rows with option_id/vote_count
-                                const optionRow = Array.isArray(results)
-                                    ? results.find((r: any) => r.option_id === option.id)
-                                    : null;
-                                const optionVotes = optionRow?.vote_count || 0;
-                                const percentage = totalVotes > 0 ? Math.round((optionVotes / totalVotes) * 100) : 0;
 
-                                return (
-                                    <div key={option.id} className="space-y-2">
-                                        <div className="flex justify-between items-center">
-                                            <span className="font-medium text-foreground">{option.text}</span>
-                                            <span className="text-sm text-muted-foreground">
-                                                {isOwner ? `${optionVotes} (${percentage}%)` : `${percentage}%`}
-                                            </span>
+                            {/* Chart Visualization */}
+                            <div className="bg-card border rounded-lg p-4">
+                                <div
+                                    role="img"
+                                    aria-label={`Bar chart showing poll results for "${poll.title}". ${poll.options?.length || 0} options displayed.`}
+                                >
+                                    <PollResultsChart
+                                        results={results}
+                                        totalVotes={totalVotes}
+                                        myOptionId={myOptionId}
+                                        isOwner={isOwner}
+                                    />
+                                </div>
+                                {poll.options && poll.options.length > 0 && (
+                                    <p className="sr-only">
+                                        Poll results: {
+                                            poll.options.map((option: PollOption, index: number) => {
+                                                const optionRow = Array.isArray(results)
+                                                    ? results.find((r: any) => r.option_id === option.id)
+                                                    : null;
+                                                const optionVotes = optionRow?.vote_count || 0;
+                                                const percentage = totalVotes > 0 ? Math.round((optionVotes / totalVotes) * 100) : 0;
+                                                return `${option.text}: ${optionVotes} votes (${percentage}%)${index < poll.options!.length - 1 ? ', ' : ''}`;
+                                            }).join('')
+                                        }
+                                    </p>
+                                )}
+                            </div>
+
+                            {/* Detailed Results Table */}
+                            <div className="space-y-3">
+                                <h4 className="text-sm font-medium text-muted-foreground">Detailed Breakdown</h4>
+                                {poll.options?.map((option: any) => {
+                                    // Support results shape from RPC returning rows with option_id/vote_count
+                                    const optionRow = Array.isArray(results)
+                                        ? results.find((r: any) => r.option_id === option.id)
+                                        : null;
+                                    const optionVotes = optionRow?.vote_count || 0;
+                                    const percentage = totalVotes > 0 ? Math.round((optionVotes / totalVotes) * 100) : 0;
+
+                                    return (
+                                        <div key={option.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                                            <div className="flex items-center space-x-3">
+                                                <div
+                                                    className={`w-4 h-4 rounded ${myOptionId === option.id ? 'bg-green-600' : 'bg-blue-600'}`}
+                                                />
+                                                <span className="font-medium text-foreground">{option.text}</span>
+                                                {myOptionId === option.id && (
+                                                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300">
+                                                        Your Vote
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <div className="text-right">
+                                                <div className="text-sm font-medium">
+                                                    {isOwner ? `${optionVotes} (${percentage}%)` : `${percentage}%`}
+                                                </div>
+                                                <Progress
+                                                    value={percentage}
+                                                    className="w-24 h-2 mt-1"
+                                                />
+                                            </div>
                                         </div>
-                                        <Progress
-                                            value={percentage}
-                                            className={`h-2 ${myOptionId === option.id ? 'bg-green-200' : ''}`}
-                                            indicatorClassName={myOptionId === option.id ? 'bg-green-600' : undefined}
-                                        />
-                                    </div>
-                                );
-                            })}
+                                    );
+                                })}
+                            </div>
                         </div>
                     ) : (
                         <div className="space-y-4">

@@ -121,36 +121,58 @@ function CreatePollForm() {
                     ) : (
                         <form onSubmit={handleSubmit} className="space-y-6">
                             <div className="space-y-1">
-                                <Label>Poll Title *</Label>
-                                <Input value={title} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTitle(e.target.value)} placeholder="What's your question?" />
-                                {fieldErrors.title && <p className="text-sm text-red-600">{fieldErrors.title}</p>}
+                                <Label htmlFor="poll-title">Poll Title *</Label>
+                                <Input
+                                    id="poll-title"
+                                    value={title}
+                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTitle(e.target.value)}
+                                    placeholder="What's your question?"
+                                    aria-invalid={!!fieldErrors.title}
+                                    aria-describedby={fieldErrors.title ? "title-error" : undefined}
+                                />
+                                {fieldErrors.title && <p id="title-error" className="text-sm text-red-600" role="alert">{fieldErrors.title}</p>}
                             </div>
 
                             <div className="space-y-1">
-                                <Label>Description</Label>
-                                <Textarea value={description} onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setDescription(e.target.value)} placeholder="(optional) Provide more context for voters" rows={3} />
-                                {fieldErrors.description && <p className="text-sm text-red-600">{fieldErrors.description}</p>}
+                                <Label htmlFor="poll-description">Description</Label>
+                                <Textarea
+                                    id="poll-description"
+                                    value={description}
+                                    onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setDescription(e.target.value)}
+                                    placeholder="(optional) Provide more context for voters"
+                                    rows={3}
+                                    aria-invalid={!!fieldErrors.description}
+                                    aria-describedby={fieldErrors.description ? "description-error" : undefined}
+                                />
+                                {fieldErrors.description && <p id="description-error" className="text-sm text-red-600" role="alert">{fieldErrors.description}</p>}
                             </div>
 
                             <div className="space-y-2">
                                 <Label>Select exactly 5 programming languages *</Label>
-                                <div className="grid grid-cols-2 gap-2 max-h-64 overflow-auto p-2 border rounded">
-                                    {catalog.map((lang) => {
-                                        const checked = languages.includes(lang);
-                                        return (
-                                            <button
-                                                type="button"
-                                                key={lang}
-                                                onClick={() => toggleLanguage(lang)}
-                                                className={`text-left px-3 py-2 rounded border ${checked ? 'bg-blue-600 text-white border-blue-600' : 'bg-background text-foreground border-border'}`}
-                                            >
-                                                {lang}
-                                            </button>
-                                        );
-                                    })}
-                                </div>
-                                <div className="text-sm text-muted-foreground">Selected: {languages.length} / 5</div>
-                                {fieldErrors.languages && <p className="text-sm text-red-600">{fieldErrors.languages}</p>}
+                                <fieldset>
+                                    <legend className="sr-only">Programming language options</legend>
+                                    <div className="grid grid-cols-2 gap-2 max-h-64 overflow-auto p-2 border rounded" role="group" aria-label="Programming language selection">
+                                        {catalog.map((lang) => {
+                                            const checked = languages.includes(lang);
+                                            return (
+                                                <button
+                                                    type="button"
+                                                    key={lang}
+                                                    onClick={() => toggleLanguage(lang)}
+                                                    className={`text-left px-3 py-2 rounded border ${checked ? 'bg-blue-600 text-white border-blue-600' : 'bg-background text-foreground border-border'}`}
+                                                    aria-pressed={checked}
+                                                    aria-describedby="language-selection-help"
+                                                >
+                                                    {lang}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                    <div id="language-selection-help" className="text-sm text-muted-foreground">
+                                        Selected: {languages.length} / 5
+                                    </div>
+                                </fieldset>
+                                {fieldErrors.languages && <p className="text-sm text-red-600" role="alert">{fieldErrors.languages}</p>}
                             </div>
 
                             <Button type="submit" disabled={loading || !isFormValid}>{loading ? "Creating…" : "Create Poll"}</Button>
