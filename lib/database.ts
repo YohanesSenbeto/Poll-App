@@ -1,6 +1,7 @@
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { supabase as serverSupabase } from './supabase'
 import { Poll } from './types'
+import { notificationService } from './email'
 
 // Use the appropriate client based on context
 const getSupabaseClient = () => {
@@ -110,6 +111,27 @@ export async function createPoll({ title, description, options }: {
 
     } catch (_) {
       // swallow analytics failures
+    }
+
+    // Send poll creation notification (best-effort)
+    try {
+      const { data: userProfile } = await supabase
+        .from('user_profiles')
+        .select('full_name, notification_preferences')
+        .eq('id', user.id)
+        .single()
+
+      if (userProfile?.notification_preferences?.pollCreated !== false) {
+        await notificationService.sendPollCreatedEmail(
+          user.email!,
+          userProfile.full_name || user.email!,
+          title,
+          poll.id
+        )
+      }
+    } catch (emailError) {
+      // Email failures should not prevent poll creation
+      console.warn('Failed to send poll creation email:', emailError)
     }
 
     return poll
@@ -312,6 +334,43 @@ export async function voteOnPoll(pollId: string, optionId: string) {
   } catch (analyticsError) {
     // Analytics errors should not prevent voting
     console.warn('Analytics update failed:', analyticsError);
+  }
+
+  // Send vote notification to poll creator (best-effort)
+  try {
+    // Get poll creator and their notification preferences
+    const { data: poll } = await supabase
+      .from('polls')
+      .select(`
+        user_id,
+        title,
+        creator:user_profiles!inner(full_name, notification_preferences)
+      `)
+      .eq('id', pollId)
+      .single()
+
+    if (poll?.creator?.notification_preferences?.pollVoteReceived !== false) {
+      // Get voter's name
+      const { data: voterProfile } = await supabase
+        .from('user_profiles')
+        .select('full_name')
+        .eq('id', user.id)
+        .single()
+
+      // Get poll creator's email
+      const { data: creatorAuth } = await supabase.auth.admin.getUserById(poll.user_id)
+
+      await notificationService.sendVoteReceivedEmail(
+        creatorAuth.user?.email || poll.creator.full_name || 'Poll Creator',
+        poll.creator.full_name || 'Poll Creator',
+        poll.title,
+        pollId,
+        voterProfile?.full_name || 'Anonymous'
+      )
+    }
+  } catch (emailError) {
+    // Email failures should not prevent voting
+    console.warn('Failed to send vote notification email:', emailError)
   }
 
   return true

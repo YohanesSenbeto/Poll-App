@@ -17,6 +17,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
+import { NotificationPreferencesComponent } from "@/components/notification-preferences";
 import {
     Trash2,
     Upload,
@@ -1180,6 +1181,11 @@ export default function ProfilePage() {
                         </CardContent>
                     </Card>
                 </div>
+            </div>
+
+            {/* Notification Preferences */}
+            <div className="mt-8">
+                <NotificationPreferencesComponent />
             </div>
         </div>
     );
