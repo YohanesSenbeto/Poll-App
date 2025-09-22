@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useMemo, memo } from "react";
+import { useState, useEffect, useMemo, useCallback, memo } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useAuth } from "@/app/auth-context";
 import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";

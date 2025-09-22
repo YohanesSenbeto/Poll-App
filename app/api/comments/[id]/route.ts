@@ -5,10 +5,10 @@ import { supabase } from '@/lib/supabase';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const commentId = params.id;
+    const { id: commentId } = await params;
 
     if (!commentId) {
       return NextResponse.json({ error: 'Comment ID is required' }, { status: 400 });
@@ -87,12 +87,12 @@ export async function GET(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const cookieStore = await cookies();
-    const supabaseAuth = createServerComponentClient({ cookies: () => cookieStore });
-    const commentId = params.id;
+    const supabaseAuth = createServerComponentClient({ cookies });
+    const { id: commentId } = await params;
     const { content } = await request.json();
 
     if (!commentId || !content) {
@@ -161,12 +161,12 @@ export async function PUT(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const cookieStore = await cookies();
-    const supabaseAuth = createServerComponentClient({ cookies: () => cookieStore });
-    const commentId = params.id;
+    const supabaseAuth = createServerComponentClient({ cookies });
+    const { id: commentId } = await params;
 
     if (!commentId) {
       return NextResponse.json({ error: 'Comment ID is required' }, { status: 400 });

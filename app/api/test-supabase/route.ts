@@ -13,7 +13,7 @@ export async function GET() {
 
     console.log('Supabase connection test:', {
       success: !testError,
-      error: testError?.message,
+      error: testError ? (testError as any)?.message || String(testError) : null,
       dataCount: testData?.length
     });
 
@@ -34,7 +34,7 @@ export async function GET() {
 
     console.log('Comments table test:', {
       success: !commentsError,
-      error: commentsError?.message,
+      error: commentsError ? (commentsError as any)?.message || String(commentsError) : null,
       dataCount: commentsData?.length
     });
 
@@ -43,11 +43,11 @@ export async function GET() {
       message: 'Supabase connection working',
       polls: {
         accessible: !testError,
-        error: testError?.message
+        error: testError ? (testError as any)?.message || String(testError) : null
       },
       comments: {
         accessible: !commentsError,
-        error: commentsError?.message,
+        error: commentsError ? (commentsError as any)?.message || String(commentsError) : null,
         tableExists: !commentsError || !commentsError.message?.includes('does not exist')
       }
     });

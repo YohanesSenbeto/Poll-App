@@ -5,7 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
 export async function POST(request: NextRequest) {
     try {
         const cookieStore = await cookies();
-        const supabase = createServerComponentClient({ cookies: () => cookieStore });
+        const supabase = createServerComponentClient({ cookies });
 
         // Get the authenticated user
         const { data: { user }, error: authError } = await supabase.auth.getUser();

@@ -6,7 +6,7 @@ export async function GET(request: NextRequest) {
   try {
     // Use server auth client to ensure RLS/session context is respected
     const cookieStore = await cookies();
-    const supabaseAuth = createServerComponentClient({ cookies: () => cookieStore });
+    const supabaseAuth = createServerComponentClient({ cookies });
     const { searchParams } = new URL(request.url);
     const pollId = searchParams.get('pollId');
 
@@ -80,7 +80,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const cookieStore = await cookies();
-    const supabaseAuth = createServerComponentClient({ cookies: () => cookieStore });
+    const supabaseAuth = createServerComponentClient({ cookies });
     const { pollId, content, parentId } = await request.json();
 
     // Validate input

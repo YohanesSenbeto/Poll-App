@@ -124,7 +124,7 @@ export async function createPoll({ title, description, options }: {
       if (userProfile?.notification_preferences?.pollCreated !== false) {
         await notificationService.sendPollCreatedEmail(
           user.email!,
-          userProfile.full_name || user.email!,
+          userProfile?.full_name || user.email!,
           title,
           poll.id
         )
@@ -349,7 +349,7 @@ export async function voteOnPoll(pollId: string, optionId: string) {
       .eq('id', pollId)
       .single()
 
-    if (poll?.creator?.notification_preferences?.pollVoteReceived !== false) {
+    if (poll?.creator?.[0]?.notification_preferences?.pollVoteReceived !== false) {
       // Get voter's name
       const { data: voterProfile } = await supabase
         .from('user_profiles')
@@ -358,12 +358,12 @@ export async function voteOnPoll(pollId: string, optionId: string) {
         .single()
 
       // Get poll creator's email
-      const { data: creatorAuth } = await supabase.auth.admin.getUserById(poll.user_id)
+      const { data: creatorAuth } = await supabase.auth.admin.getUserById(poll!.user_id)
 
       await notificationService.sendVoteReceivedEmail(
-        creatorAuth.user?.email || poll.creator.full_name || 'Poll Creator',
-        poll.creator.full_name || 'Poll Creator',
-        poll.title,
+        creatorAuth.user?.email || poll!.creator?.[0]?.full_name || 'Poll Creator',
+        poll!.creator?.[0]?.full_name || 'Poll Creator',
+        poll!.title,
         pollId,
         voterProfile?.full_name || 'Anonymous'
       )

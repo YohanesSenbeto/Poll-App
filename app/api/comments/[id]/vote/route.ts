@@ -5,12 +5,12 @@ import { supabase } from '@/lib/supabase';
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const cookieStore = cookies();
-    const supabaseAuth = createServerComponentClient({ cookies: () => cookieStore });
-    const commentId = params.id;
+    const cookieStore = await cookies();
+    const supabaseAuth = createServerComponentClient({ cookies });
+    const { id: commentId } = await params;
     const { voteType } = await request.json();
 
     if (!commentId || voteType === undefined || ![1, -1].includes(voteType)) {

@@ -181,7 +181,7 @@ export function NotificationPreferencesComponent({ className }: NotificationPref
               <Switch
                 id="poll-created"
                 checked={preferences.pollCreated}
-                onCheckedChange={(checked) => updatePreference('pollCreated', checked)}
+                onCheckedChange={(checked: boolean) => updatePreference('pollCreated', checked)}
               />
             </div>
 
@@ -198,7 +198,7 @@ export function NotificationPreferencesComponent({ className }: NotificationPref
               <Switch
                 id="vote-received"
                 checked={preferences.pollVoteReceived}
-                onCheckedChange={(checked) => updatePreference('pollVoteReceived', checked)}
+                onCheckedChange={(checked: boolean) => updatePreference('pollVoteReceived', checked)}
               />
             </div>
 
@@ -215,7 +215,7 @@ export function NotificationPreferencesComponent({ className }: NotificationPref
               <Switch
                 id="admin-alerts"
                 checked={preferences.adminAlerts}
-                onCheckedChange={(checked) => updatePreference('adminAlerts', checked)}
+                onCheckedChange={(checked: boolean) => updatePreference('adminAlerts', checked)}
                 disabled
               />
             </div>
@@ -233,7 +233,7 @@ export function NotificationPreferencesComponent({ className }: NotificationPref
               <Switch
                 id="weekly-digest"
                 checked={preferences.weeklyDigest}
-                onCheckedChange={(checked) => updatePreference('weeklyDigest', checked)}
+                onCheckedChange={(checked: boolean) => updatePreference('weeklyDigest', checked)}
               />
             </div>
 
