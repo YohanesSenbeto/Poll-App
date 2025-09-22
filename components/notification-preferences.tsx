@@ -36,24 +36,45 @@ export function NotificationPreferencesComponent({ className }: NotificationPref
   const loadPreferences = async () => {
     if (!user) return;
 
+    const defaultPrefs: NotificationPreferences = {
+      pollCreated: true,
+      pollVoteReceived: true,
+      adminAlerts: false,
+      weeklyDigest: true,
+    };
+
     setLoading(true);
     try {
       const { data, error } = await supabase
         .from('user_profiles')
         .select('notification_preferences')
         .eq('id', user.id)
-        .single();
+        .maybeSingle();
 
-      if (error) {
-        console.error('Error loading preferences:', error);
+      // Non-fatal: Some environments return empty error objects – continue bootstrapping
+      if (error && ((error as any).code || (error as any).message)) {
+        console.warn('Error loading preferences (non-fatal):', error);
+      }
+
+      if (!data || !data.notification_preferences) {
+        // Bootstrap defaults if missing
+        const { error: upsertError } = await supabase
+          .from('user_profiles')
+          .upsert({ id: user.id, notification_preferences: defaultPrefs }, { onConflict: 'id' });
+
+        if (upsertError && ((upsertError as any).code || (upsertError as any).message)) {
+          console.warn('Error creating default preferences (non-fatal):', upsertError);
+        }
+
+        setPreferences(defaultPrefs);
         return;
       }
 
-      if (data?.notification_preferences) {
-        setPreferences(data.notification_preferences as NotificationPreferences);
-      }
+      setPreferences(data.notification_preferences as NotificationPreferences);
     } catch (error) {
-      console.error('Error loading preferences:', error);
+      console.warn('Error loading preferences (caught, non-fatal):', error);
+      // Fallback to defaults to keep UI responsive
+      setPreferences({ pollCreated: true, pollVoteReceived: true, adminAlerts: false, weeklyDigest: true });
     } finally {
       setLoading(false);
     }
@@ -68,10 +89,9 @@ export function NotificationPreferencesComponent({ className }: NotificationPref
     try {
       const { error } = await supabase
         .from('user_profiles')
-        .update({ notification_preferences: preferences })
-        .eq('id', user.id);
+        .upsert({ id: user.id, notification_preferences: preferences }, { onConflict: 'id' });
 
-      if (error) {
+      if (error && ((error as any).code || (error as any).message)) {
         console.error('Error saving preferences:', error);
         setMessage({ type: 'error', text: 'Failed to save preferences. Please try again.' });
         return;

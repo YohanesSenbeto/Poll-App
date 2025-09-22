@@ -11,6 +11,7 @@ import { useAuth } from "@/app/auth-context";
 import { Mail, CheckCircle, AlertCircle, Loader2 } from "lucide-react";
 
 interface TestResult {
+  [x: string]: any;
   success: boolean;
   message: string;
   emailType: string;

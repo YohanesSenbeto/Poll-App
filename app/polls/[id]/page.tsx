@@ -18,6 +18,7 @@ import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import Link from "next/link";
 import { ArrowLeft, CheckCircle, Clock, Users, Edit } from "lucide-react";
 import type { Poll, PollOption } from "@/lib/types";
+import { CommentList } from "@/components/comment-list";
 import {
   BarChart,
   Bar,
@@ -371,6 +372,11 @@ function PollView() {
                     )}
                 </CardContent>
             </Card>
+
+            {/* Comments Section */}
+            <div className="mt-8">
+                <CommentList pollId={pollId} />
+            </div>
         </div>
     );
 }

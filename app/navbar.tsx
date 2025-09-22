@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -12,14 +12,20 @@ import {
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { LogOut, PlusCircle, BarChart3, Menu, X, Shield, Users, MessageSquare } from "lucide-react";
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useAuth } from "@/app/auth-context";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { PollLogo } from "@/components/poll-logo";
+import { useRouter } from "next/navigation";
 
 export function Navbar() {
-    const { user, signOut, isAdmin } = useAuth();
+    const { user, userProfile, signOut, isAdmin } = useAuth();
+    const router = useRouter();
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+    const toggleMobileMenu = useCallback(() => {
+        setMobileMenuOpen(prev => !prev);
+    }, []);
 
     const handleLogout = async () => {
         try {
@@ -30,6 +36,11 @@ export function Navbar() {
     };
 
     const userInitial = user?.email?.charAt(0).toUpperCase() || "U";
+    // Prefer avatar_url from user_profiles, then user_metadata, else fallback letter
+    const avatarUrl = (userProfile as any)?.avatar_url
+        || (user as any)?.user_metadata?.avatar_url
+        || (user as any)?.user_metadata?.picture
+        || undefined;
 
     return (
         <header className="border-b bg-background shadow-sm">
@@ -95,7 +106,7 @@ export function Navbar() {
                         <ThemeToggle />
                         <button
                             className="md:hidden p-1 rounded-md hover:bg-muted transition-colors"
-                            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                            onClick={toggleMobileMenu}
                             aria-label="Toggle menu"
                         >
                             {mobileMenuOpen ? (
@@ -110,8 +121,13 @@ export function Navbar() {
                                     <Button
                                         variant="ghost"
                                         className="relative h-6 w-6 sm:h-8 sm:w-8 rounded-full p-0"
+                                        title="Edit profile"
+                                        onClick={() => router.push('/profile')}
                                     >
                                         <Avatar className="h-6 w-6 sm:h-8 sm:w-8">
+                                            {avatarUrl && (
+                                                <AvatarImage src={avatarUrl} alt="Profile" />
+                                            )}
                                             <AvatarFallback className="bg-primary text-white text-xs">
                                                 {userInitial}
                                             </AvatarFallback>

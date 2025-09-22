@@ -6,15 +6,19 @@ import { Navbar } from "@/app/navbar";
 import { NotificationContainer } from "@/components/ui/notification";
 import { ThemeProvider } from "./theme-context";
 import { Footer } from "@/components/footer";
+import { Suspense } from "react";
+import { PerformanceMonitor } from "@/components/performance-monitor";
 
 const geistSans = Geist({
     variable: "--font-geist-sans",
     subsets: ["latin"],
+    display: 'swap', // Optimize font loading
 });
 
 const geistMono = Geist_Mono({
     variable: "--font-geist-mono",
     subsets: ["latin"],
+    display: 'swap', // Optimize font loading
 });
 
 // Skip Links Component
@@ -55,12 +59,19 @@ export default function RootLayout({
                 className={`${geistSans.variable} ${geistMono.variable} antialiased overflow-x-hidden`}
             >
                 <SkipLinks />
+                <PerformanceMonitor />
                 <ThemeProvider>
                     <AuthProvider>
                         <Navbar />
                         <NotificationContainer />
                         <main id="main-content" className="w-full max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 py-3 sm:py-4 md:py-6 lg:py-8 min-h-[calc(100vh-200px)]">
-                            {children}
+                            <Suspense fallback={
+                                <div className="flex justify-center items-center h-64">
+                                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                                </div>
+                            }>
+                                {children}
+                            </Suspense>
                         </main>
                         <Footer />
                     </AuthProvider>

@@ -167,6 +167,84 @@ export default function ProfilePage() {
 
     const [myLangAgg, setMyLangAgg] = useState<LangAggRow[]>([]);
 
+    // User statistics state
+    const [totalVotes, setTotalVotes] = useState(0);
+    const [uniqueLanguages, setUniqueLanguages] = useState(0);
+    const [pollsParticipated, setPollsParticipated] = useState(0);
+    const [commentsCount, setCommentsCount] = useState(0);
+
+    // Function to fetch user statistics
+    const fetchUserStatistics = useCallback(async () => {
+        if (!user?.id) return;
+
+        try {
+            const { data: votes, error: votesError } = await supabase
+                .from('votes')
+                .select('option_id, created_at')
+                .eq('user_id', user.id);
+
+            if (votesError) {
+                console.error('Error fetching user votes:', votesError);
+                return;
+            }
+
+            if (votes && votes.length > 0) {
+                // Get option texts
+                const optionIds = Array.from(new Set(votes.map(v => v.option_id).filter(Boolean)));
+                const { data: options } = await supabase
+                    .from('options')
+                    .select('id, text')
+                    .in('id', optionIds);
+
+                const idToText = new Map<string, string>();
+                (options || []).forEach((o: any) => {
+                    if (o?.id && o?.text) idToText.set(o.id, o.text);
+                });
+
+                // Calculate statistics
+                const uniqueLangs = new Set<string>();
+                votes.forEach(vote => {
+                    const lang = idToText.get(vote.option_id);
+                    if (lang) uniqueLangs.add(lang);
+                });
+
+                setTotalVotes(votes.length);
+                setUniqueLanguages(uniqueLangs.size);
+                setPollsParticipated(new Set(votes.map(v => v.option_id)).size);
+            } else {
+                setTotalVotes(0);
+                setUniqueLanguages(0);
+                setPollsParticipated(0);
+            }
+
+            // Get comments count
+            const { count: commentsCount } = await supabase
+                .from('comments')
+                .select('*', { count: 'exact', head: true })
+                .eq('user_id', user.id);
+
+            setCommentsCount(commentsCount || 0);
+
+        } catch (error) {
+            console.error('Error fetching user statistics:', error);
+        }
+    }, [user?.id, supabase]);
+
+    // Function to get user achievements
+    const getAchievements = useCallback(() => {
+        const achievements = [];
+
+        if (totalVotes >= 1) achievements.push({ name: "First Vote", icon: "🗳️" });
+        if (totalVotes >= 10) achievements.push({ name: "Vote Enthusiast", icon: "📊" });
+        if (totalVotes >= 50) achievements.push({ name: "Poll Master", icon: "🏆" });
+        if (uniqueLanguages >= 3) achievements.push({ name: "Language Explorer", icon: "🌍" });
+        if (uniqueLanguages >= 5) achievements.push({ name: "Polyglot Voter", icon: "💻" });
+        if (commentsCount >= 1) achievements.push({ name: "Community Voice", icon: "💬" });
+        if (commentsCount >= 10) achievements.push({ name: "Discussion Leader", icon: "🎤" });
+
+        return achievements;
+    }, [totalVotes, uniqueLanguages, commentsCount]);
+
     useEffect(() => {
         if (!loading && !user) {
             router.push("/auth/login");
@@ -177,6 +255,7 @@ export default function ProfilePage() {
         if (user) {
             fetchProfile();
             checkStorageStatus();
+            fetchUserStatistics();
         }
     }, [user]);
 
@@ -267,24 +346,57 @@ export default function ProfilePage() {
                 throw new Error("No user ID found");
             }
 
-            console.log("Profile functionality simplified - using auth user data");
-            
-            // Create a basic profile from auth user data
-            const basicProfile: UserProfile = {
+            // Load profile from user_profiles; bootstrap if missing
+            const { data, error } = await supabase
+                .from('user_profiles')
+                .select('display_name, username, bio, avatar_url')
+                .eq('id', user.id)
+                .maybeSingle();
+
+            // Non-fatal: proceed to bootstrap/defaults if select failed or returned null
+            if (error) {
+                console.warn('profile select error (non-fatal):', error);
+            }
+
+            if (!data) {
+                // Create a minimal row so later updates work seamlessly
+                await supabase
+                    .from('user_profiles')
+                    .upsert({ id: user.id }, { onConflict: 'id' });
+
+                const basicProfile: UserProfile = {
+                    id: user.id,
+                    email: user.email || '',
+                    full_name: '',
+                    username: '',
+                    avatar_url: '',
+                    bio: '',
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString()
+                };
+
+                setProfile(basicProfile);
+                setFullName('');
+                setUsername('');
+                setBio('');
+                setLoadingProfile(false);
+                return;
+            }
+
+            // Map DB to form/local state
+            setProfile((prev) => ({
                 id: user.id,
                 email: user.email || '',
-                full_name: '',
-                username: '',
-                avatar_url: '',
-                bio: '',
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString()
-            };
-            
-            setProfile(basicProfile);
-            setFullName('');
-            setUsername('');
-            setBio('');
+                full_name: data.display_name || '',
+                username: data.username || '',
+                avatar_url: data.avatar_url || '',
+                bio: data.bio || '',
+                created_at: prev?.created_at || '',
+                updated_at: new Date().toISOString(),
+            }));
+            setFullName(data.display_name || '');
+            setUsername(data.username || '');
+            setBio(data.bio || '');
             setLoadingProfile(false);
             return;
         } catch (error: any) {
@@ -408,12 +520,13 @@ export default function ProfilePage() {
                 }
             }
 
-            // Upload new avatar
+            // Upload new avatar (upsert + content type)
             const { error: uploadError } = await supabase.storage
                 .from("avatars")
                 .upload(filePath, avatarFile, {
                     cacheControl: "3600",
-                    upsert: false,
+                    upsert: true,
+                    contentType: avatarFile.type || "image/*",
                 });
 
             if (uploadError) {
@@ -439,15 +552,18 @@ export default function ProfilePage() {
                 data: { publicUrl },
             } = supabase.storage.from("avatars").getPublicUrl(filePath);
 
-            console.log("Avatar uploaded successfully, public URL:", publicUrl);
+            // Persist avatar URL into profile table for consistency
+            const { error: avatarSaveError } = await supabase
+                .from('user_profiles')
+                .update({ avatar_url: publicUrl, updated_at: new Date().toISOString() })
+                .eq('id', user.id);
 
-            // Skip profiles table update - avatar URL is stored locally
-            console.log("Avatar URL would be stored in profiles table, but using local state instead:", publicUrl);
+            if (avatarSaveError) {
+                console.warn("Avatar URL DB save warning:", avatarSaveError);
+            }
 
             // Update local state
-            setProfile((prev) =>
-                prev ? { ...prev, avatar_url: publicUrl } : null
-            );
+            setProfile((prev) => (prev ? { ...prev, avatar_url: publicUrl } : prev));
             setSuccess("Avatar updated successfully!");
             return true;
         } catch (error: any) {
@@ -468,25 +584,61 @@ export default function ProfilePage() {
         setSuccess(null);
 
         try {
-            // Profile updates are now handled locally without database storage
-            console.log('Profile data updated locally:', { fullName, username, bio });
-            // Update local state immediately
-            const updates = {
+            // Persist profile to user_profiles
+            const updatesDb: any = {
+                id: user.id,
+                display_name: fullName || null,
+                username: username || null,
+                bio: bio || null,
+                updated_at: new Date().toISOString(),
+            };
+
+            // Upload avatar first if provided
+            if (avatarFile) {
+                const avatarSuccess = await uploadAvatar();
+                if (!avatarSuccess) return;
+                // use profile?.avatar_url which uploadAvatar sets locally
+                if (profile?.avatar_url) updatesDb.avatar_url = profile.avatar_url;
+            }
+
+            // Check if a profile row exists
+            const { data: existing, error: selErr } = await supabase
+                .from('user_profiles')
+                .select('id')
+                .eq('id', user.id)
+                .maybeSingle();
+
+            if (selErr && ((selErr as any).code || (selErr as any).message)) {
+                console.warn('profile select error (non-fatal):', JSON.stringify(selErr, null, 2));
+            }
+
+            let writeError: any = null;
+            if (existing?.id) {
+                const { error: updErr } = await supabase
+                    .from('user_profiles')
+                    .update(updatesDb)
+                    .eq('id', user.id);
+                writeError = updErr;
+            } else {
+                const { error: insErr } = await supabase
+                    .from('user_profiles')
+                    .insert({ id: user.id, ...updatesDb });
+                writeError = insErr;
+            }
+
+            if (writeError) {
+                console.error('profile write error:', JSON.stringify(writeError, null, 2));
+                throw writeError;
+            }
+
+            // Update local state
+            setProfile((prev) => (prev ? {
+                ...prev,
                 full_name: fullName,
                 username,
                 bio,
-                updated_at: new Date().toISOString(),
-            };
-            setProfile((prev) => (prev ? { ...prev, ...updates } : null));
-
-            // Upload avatar if selected (wait for it to complete)
-            if (avatarFile) {
-                const avatarSuccess = await uploadAvatar();
-                if (!avatarSuccess) {
-                    // If avatar upload fails, don't show the general success message
-                    return;
-                }
-            }
+                updated_at: updatesDb.updated_at,
+              } : prev));
 
             setSuccess("Profile updated successfully!");
 
@@ -641,15 +793,60 @@ export default function ProfilePage() {
                         </p>
                     </div>
 
+                    {/* User Statistics */}
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>📊 Your Voting Statistics</CardTitle>
+                            <CardDescription>Your activity and impact on the platform</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                                <div className="text-center p-4 bg-muted/50 rounded-lg">
+                                    <div className="text-2xl font-bold text-primary">{totalVotes}</div>
+                                    <div className="text-sm text-muted-foreground">Total Votes</div>
+                                </div>
+                                <div className="text-center p-4 bg-muted/50 rounded-lg">
+                                    <div className="text-2xl font-bold text-green-600">{uniqueLanguages}</div>
+                                    <div className="text-sm text-muted-foreground">Languages Voted</div>
+                                </div>
+                                <div className="text-center p-4 bg-muted/50 rounded-lg">
+                                    <div className="text-2xl font-bold text-blue-600">{pollsParticipated}</div>
+                                    <div className="text-sm text-muted-foreground">Polls Joined</div>
+                                </div>
+                                <div className="text-center p-4 bg-muted/50 rounded-lg">
+                                    <div className="text-2xl font-bold text-purple-600">{commentsCount}</div>
+                                    <div className="text-sm text-muted-foreground">Comments</div>
+                                </div>
+                            </div>
+
+                            {/* Achievements */}
+                            <div className="space-y-3">
+                                <h4 className="font-semibold text-sm">🏆 Achievements</h4>
+                                <div className="flex flex-wrap gap-2">
+                                    {getAchievements().map((achievement, index) => (
+                                        <div key={index} className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-gradient-to-r from-yellow-100 to-orange-100 text-yellow-800 dark:from-yellow-900/30 dark:to-orange-900/30 dark:text-yellow-300">
+                                            {achievement.icon} {achievement.name}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+
                     {/* My Voting Distribution */}
                     <Card>
                         <CardHeader>
-                            <CardTitle>My Voting Distribution</CardTitle>
+                            <CardTitle>📈 Your Language Preferences</CardTitle>
                             <CardDescription>Languages you have voted for (all time)</CardDescription>
                         </CardHeader>
                         <CardContent>
                             {myLangAgg.length === 0 ? (
-                                <p className="text-sm text-muted-foreground">You haven't voted yet.</p>
+                                <div className="text-center py-8">
+                                    <p className="text-sm text-muted-foreground mb-4">You haven't voted yet.</p>
+                                    <Button asChild variant="outline" size="sm">
+                                        <Link href="/">🗳️ Cast Your First Vote</Link>
+                                    </Button>
+                                </div>
                             ) : (
                                 <div className="space-y-6">
                                     {/* Chart Visualization */}
@@ -696,6 +893,78 @@ export default function ProfilePage() {
                                     </div>
                                 </div>
                             )}
+                        </CardContent>
+                    </Card>
+
+                    {/* Recent Activity */}
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>📋 Recent Activity</CardTitle>
+                            <CardDescription>Your latest votes and interactions</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="space-y-4">
+                                {totalVotes > 0 ? (
+                                    <div className="space-y-3">
+                                        <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                                            <div className="flex items-center space-x-3">
+                                                <div className="w-8 h-8 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center">
+                                                    <span className="text-green-600 dark:text-green-400 text-sm">🗳️</span>
+                                                </div>
+                                                <div>
+                                                    <p className="text-sm font-medium">Active Voter</p>
+                                                    <p className="text-xs text-muted-foreground">You have cast {totalVotes} votes across {uniqueLanguages} programming languages</p>
+                                                </div>
+                                            </div>
+                                            <div className="text-xs text-muted-foreground">
+                                                {pollsParticipated} polls participated
+                                            </div>
+                                        </div>
+
+                                        {commentsCount > 0 && (
+                                            <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                                                <div className="flex items-center space-x-3">
+                                                    <div className="w-8 h-8 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center">
+                                                        <span className="text-blue-600 dark:text-blue-400 text-sm">💬</span>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-sm font-medium">Community Contributor</p>
+                                                        <p className="text-xs text-muted-foreground">You have posted {commentsCount} comments in discussions</p>
+                                                    </div>
+                                                </div>
+                                                <div className="text-xs text-muted-foreground">
+                                                    Discussion leader
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                                            <div className="flex items-center space-x-3">
+                                                <div className="w-8 h-8 bg-purple-100 dark:bg-purple-900/30 rounded-full flex items-center justify-center">
+                                                    <span className="text-purple-600 dark:text-purple-400 text-sm">📊</span>
+                                                </div>
+                                                <div>
+                                                    <p className="text-sm font-medium">Platform Impact</p>
+                                                    <p className="text-xs text-muted-foreground">Your votes help shape programming language popularity rankings</p>
+                                                </div>
+                                            </div>
+                                            <Button asChild variant="ghost" size="sm">
+                                                <Link href="/polls">View Rankings</Link>
+                                            </Button>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="text-center py-8">
+                                        <div className="w-12 h-12 bg-muted rounded-full flex items-center justify-center mx-auto mb-3">
+                                            <span className="text-muted-foreground text-lg">🗳️</span>
+                                        </div>
+                                        <p className="text-sm text-muted-foreground mb-4">No activity yet</p>
+                                        <Button asChild variant="outline" size="sm">
+                                            <Link href="/">Start Voting</Link>
+                                        </Button>
+                                    </div>
+                                )}
+                            </div>
                         </CardContent>
                     </Card>
 
@@ -826,7 +1095,7 @@ export default function ProfilePage() {
                         </CardHeader>
                         <CardContent className="space-y-4">
                             <div className="flex flex-col sm:flex-row items-center space-y-4 sm:space-y-0 sm:space-x-6">
-                                <Avatar className="h-24 w-24 border-2 border-border">
+                                <Avatar className="h-20 w-20 sm:h-24 sm:w-24 border-2 border-border">
                                     <AvatarImage
                                         src={
                                             avatarPreview || profile.avatar_url
@@ -834,7 +1103,7 @@ export default function ProfilePage() {
                                         alt={profile.full_name || "Profile"}
                                         className="object-cover"
                                     />
-                                    <AvatarFallback className="text-3xl bg-muted">
+                                    <AvatarFallback className="text-2xl sm:text-3xl bg-muted">
                                         {profile.full_name
                                             ?.charAt(0)
                                             ?.toUpperCase() ||
@@ -843,14 +1112,14 @@ export default function ProfilePage() {
                                                 .toUpperCase()}
                                     </AvatarFallback>
                                 </Avatar>
-                                <div className="flex flex-col space-y-3">
+                                <div className="flex flex-col space-y-3 w-full sm:w-auto">
                                     <div>
                                         <Label
                                             htmlFor="avatar-upload"
                                             className="cursor-pointer"
                                         >
-                                            <div className="flex items-center space-x-2 px-4 py-2 border border-border rounded-md hover:bg-muted transition-colors">
-                                                <Upload size={16} />
+                                            <div className="flex items-center justify-center space-x-2 px-3 sm:px-4 py-2 border border-border rounded-md hover:bg-muted transition-colors text-sm">
+                                                <Upload size={14} />
                                                 <span>Choose Photo</span>
                                             </div>
                                             <Input
@@ -951,7 +1220,7 @@ export default function ProfilePage() {
                                 onSubmit={handleProfileUpdate}
                                 className="space-y-4"
                             >
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                                     <div className="space-y-2">
                                         <Label htmlFor="fullName">
                                             Full Name

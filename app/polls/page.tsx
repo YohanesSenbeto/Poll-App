@@ -7,15 +7,16 @@ import { Progress } from "@/components/ui/progress";
 import { getPollById, getPollResults, getUserPolls, deletePoll } from "@/lib/database";
 import { useAuth } from "@/app/auth-context";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
+    BarChart,
+    Bar,
+    XAxis,
+    YAxis,
+    CartesianGrid,
+    Tooltip,
+    ResponsiveContainer,
   Cell
 } from 'recharts';
 
@@ -24,7 +25,7 @@ const COLORS = ['#8884d8', '#82ca9d', '#ffc658', '#ff7c7c', '#8dd1e1', '#d084d0'
 
 // Aggregated Language Chart Component (Memoized)
 const AggregatedLanguageChart = memo(function AggregatedLanguageChart({ data, userLangs }: {
-    data: Array<{ name: string; pct: number }>,
+    data: Array<{ name: string; pct: number; votes: number }>,
     userLangs: Set<string>
 }) {
     // Memoize chart data to prevent unnecessary recalculations
@@ -44,45 +45,52 @@ const AggregatedLanguageChart = memo(function AggregatedLanguageChart({ data, us
         return (
             <div className="h-64 flex items-center justify-center text-muted-foreground">
                 No data to display
-            </div>
+                    </div>
         );
     }
 
     return (
-        <div className="w-full h-64">
+        <div className="w-full h-48 sm:h-56 md:h-64 lg:h-72 overflow-hidden">
             <ResponsiveContainer width="100%" height="100%">
                 <BarChart
                     data={chartData}
                     margin={{
-                        top: 5,
-                        right: 30,
-                        left: 20,
-                        bottom: 5,
+                        top: 10,
+                        right: 10,
+                        left: 10,
+                        bottom: 60,
                     }}
                 >
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis
+                    <CartesianGrid strokeDasharray="2 2" />
+                    <XAxis 
                         dataKey="name"
-                        tick={{ fontSize: 10 }}
+                        tick={{ fontSize: 9 }}
                         angle={-45}
                         textAnchor="end"
-                        height={80}
+                        height={60}
                         interval={0}
                     />
-                    <YAxis tick={{ fontSize: 12 }} />
+                    <YAxis 
+                        type="number"
+                        domain={[0, 100]}
+                        tick={{ fontSize: 9 }}
+                        width={50}
+                        label={{ value: 'Percentage (%)', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle' } }}
+                    />
                     <Tooltip
                         formatter={(value: number, name: string, props: any) => [
-                            `${value}%`,
-                            'Percentage'
+                            `${value}% (${props.payload?.votes || 0} votes) - ${name}`,
+                            'Community Vote Share'
                         ]}
-                        labelFormatter={(label) => `Language: ${label}`}
+                        labelFormatter={(label) => `🏆 ${label} Ranking`}
                         contentStyle={{
                             backgroundColor: 'hsl(var(--background))',
                             border: '1px solid hsl(var(--border))',
-                            borderRadius: '6px'
+                            borderRadius: '6px',
+                            fontSize: '11px'
                         }}
                     />
-                    <Bar dataKey="percentage" radius={[4, 4, 0, 0]}>
+                    <Bar dataKey="percentage" radius={[3, 3, 0, 0]}>
                         {chartData.map((entry: any, index: number) => (
                             <Cell
                                 key={`cell-${index}`}
@@ -107,7 +115,7 @@ export default function PollsPage() {
     const [myPolls, setMyPolls] = useState<any[]>([]);
     const [deletingId, setDeletingId] = useState<string | null>(null);
 
-    const [langAgg, setLangAgg] = useState<Array<{ name: string; pct: number }>>([]);
+    const [langAgg, setLangAgg] = useState<Array<{ name: string; pct: number; votes: number }>>([]);
     const [range, setRange] = useState<'24h' | '7d' | '30d'>('7d');
     const [createdCount, setCreatedCount] = useState<number>(0);
     const [userLangs, setUserLangs] = useState<Set<string>>(new Set());
@@ -119,8 +127,29 @@ export default function PollsPage() {
             setError(null);
             // Defer heavy summary; only fetch user's own polls for management
             if (user?.id) {
+                // Check cache first
+                const cacheKey = `user_polls_${user.id}`;
+                const cached = sessionStorage.getItem(cacheKey);
+                if (cached) {
+                    const { data, timestamp } = JSON.parse(cached);
+                    // Cache valid for 2 minutes
+                    if (Date.now() - timestamp < 2 * 60 * 1000) {
+                        setMyPolls(data);
+                        return;
+                    }
+                }
+
                 const mine = await getUserPolls(user.id);
-                setMyPolls(mine || []);
+                const polls = mine || [];
+                setMyPolls(polls);
+                
+                // Cache the result
+                if (typeof window !== "undefined") {
+                    sessionStorage.setItem(cacheKey, JSON.stringify({
+                        data: polls,
+                        timestamp: Date.now()
+                    }));
+                }
             } else {
                 setMyPolls([]);
             }
@@ -154,167 +183,98 @@ export default function PollsPage() {
         return () => { supabase.removeChannel(channel); };
     }, [supabase]);
 
-    // Compute aggregated language percentages across visible polls for selected range
-    useEffect(() => {
-        let cancelled = false;
-        (async () => {
-            try {
-                const since = new Date();
-                if (range === '24h') since.setDate(since.getDate() - 1);
-                else if (range === '7d') since.setDate(since.getDate() - 7);
-                else if (range === '30d') since.setDate(since.getDate() - 30);
-                const sinceISO = since.toISOString();
+    // Function to fetch chart data
+    const fetchChartData = useCallback(async () => {
+        try {
+            const since = new Date();
+            if (range === '24h') since.setDate(since.getDate() - 1);
+            else if (range === '7d') since.setDate(since.getDate() - 7);
+            else if (range === '30d') since.setDate(since.getDate() - 30);
+            const sinceISO = since.toISOString();
 
-                // Count polls created in this range efficiently
-                const { data: pollsInRange } = await supabase
-                    .from('polls')
-                    .select('id')
-                    .gte('created_at', sinceISO)
-                    .eq('is_active', true);
-                if (!cancelled) setCreatedCount((pollsInRange || []).length);
+            // Get all votes for programming languages (including recent ones)
+            const { data: votes, error: votesError } = await supabase
+                .from('votes')
+                .select('option_id, poll_id, created_at, user_id')
+                .gte('created_at', sinceISO);
 
-                // Votes aggregation (all users)
-                const { data: votes, error: votesError } = await supabase
-                    .from('votes')
-                    .select('option_id, poll_id, created_at')
-                    .gte('created_at', sinceISO);
+            if (votesError) {
+                console.error('Error fetching votes:', votesError);
+                return;
+            }
 
-                // User's own most recent vote in range (for highlight)
-                let userVotes: any[] = [];
-                if (user?.id) {
-                    const { data: myVotes } = await supabase
-                        .from('votes')
-                        .select('option_id, created_at')
-                        .eq('user_id', user.id)
-                        .gte('created_at', sinceISO);
-                    // Keep only the latest vote
-                    userVotes = (myVotes || []).sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 1);
-                }
+            if (!votes || votes.length === 0) {
+                setLangAgg([] as Array<{ name: string; pct: number; votes: number }>);
+                setUserLangs(new Set());
+                return;
+            }
 
-                const ensureOptionTexts = async (optionIds: string[]) => {
-                    if (optionIds.length === 0) return new Map<string, string>();
-                    const { data: optionsRows } = await supabase
-                        .from('options')
-                        .select('id, text')
-                        .in('id', optionIds);
-                    const map = new Map<string, string>();
-                    (optionsRows || []).forEach((o: any) => { if (o?.id && o?.text) map.set(o.id, o.text); });
-                    return map;
-                };
+            // Get option texts for all vote option IDs
+            const optionIds = Array.from(new Set(votes.map(v => v.option_id).filter(Boolean)));
+            const { data: optionsRows } = await supabase
+                .from('options')
+                .select('id, text')
+                .in('id', optionIds);
 
-                if (votesError) {
-                    if (!cancelled) { setLangAgg([]); setUserLangs(new Set()); }
-                    return;
-                }
+            const idToText = new Map<string, string>();
+            (optionsRows || []).forEach((o: any) => {
+                if (o?.id && o?.text) idToText.set(o.id, o.text);
+            });
 
-                if (!votes || votes.length === 0) {
-                    // Fallback 0% bars using option texts from visible polls (batched)
-                    const names = new Set<string>();
-                // Pull common option texts for fallback without needing poll IDs
-                const { data: optsBatch } = await supabase
-                    .from('options')
-                    .select('text')
-                    .limit(100);
-                (optsBatch || []).forEach((o: any) => { if (o?.text) names.add(o.text as string); });
-                    // Highlight user's languages even if no votes in range (based on their own votes in range)
-                    const userOptionIds = Array.from(new Set((userVotes || []).map(v => v.option_id).filter(Boolean)));
-                    const idToTextUser = await ensureOptionTexts(userOptionIds as string[]);
-                    const userSet = new Set<string>();
-                    idToTextUser.forEach((val) => userSet.add(String(val).trim().toLowerCase()));
-                    // Fallback to latest overall vote if none in range
-                    if (user?.id && userSet.size === 0) {
-                        const { data: latestVote } = await supabase
-                            .from('votes')
-                            .select('option_id')
-                            .eq('user_id', user.id)
-                            .order('created_at', { ascending: false })
-                            .limit(1)
-                            .single();
-                        if (latestVote?.option_id) {
-                            const { data: opt } = await supabase
-                                .from('options')
-                                .select('id, text')
-                                .eq('id', latestVote.option_id)
-                                .single();
-                            if (opt?.text) {
-                                userSet.add(String(opt.text).trim().toLowerCase());
-                                setMyLatestLanguage(opt.text);
-                                setMyVoteInRange(false);
-                            }
-                        }
-                    }
+            // Aggregate votes by programming language
+            const langToCount = new Map<string, number>();
+            let totalVotes = 0;
 
-                    const fallback = Array.from(names).slice(0, 50).map((name) => ({ name, pct: 0 }));
-                    if (!cancelled) { setLangAgg(fallback); setUserLangs(userSet); }
-                    return;
-                }
-
-                const optionIds = Array.from(new Set(votes.map(v => v.option_id).filter(Boolean)));
-                // Include user's option ids in the mapping as well (union)
-                const userOptionIds = Array.from(new Set((userVotes || []).map(v => v.option_id).filter(Boolean)));
-                const allOptionIds = Array.from(new Set([...optionIds, ...userOptionIds]));
-                const idToText = await ensureOptionTexts(allOptionIds as string[]);
-
-                // Build user language set for highlighting (only latest); if none in range, fall back to latest overall
-                const userSet = new Set<string>();
-                let latestLabel: string | null = null;
-                for (const uv of userVotes) {
-                    const nm = idToText.get(uv.option_id);
-                    if (nm) { userSet.add(String(nm).trim().toLowerCase()); latestLabel = String(nm); setMyLatestLanguage(nm); setMyVoteInRange(true); break; }
-                }
-                if (user?.id && userSet.size === 0) {
-                    const { data: latestVote } = await supabase
-                        .from('votes')
-                        .select('option_id')
-                        .eq('user_id', user.id)
-                        .order('created_at', { ascending: false })
-                        .limit(1)
-                        .single();
-                    if (latestVote?.option_id) {
-                        const { data: opt } = await supabase
-                            .from('options')
-                            .select('id, text')
-                            .eq('id', latestVote.option_id)
-                            .single();
-                        if (opt?.text) {
-                            userSet.add(String(opt.text).trim().toLowerCase());
-                            latestLabel = String(opt.text);
-                            setMyLatestLanguage(opt.text);
-                            setMyVoteInRange(false);
-                        }
-                    }
-                }
-
-                // Aggregate all users
-                const langToCount = new Map<string, number>();
-                let totalVotes = 0;
-                for (const v of votes) {
-                    const name = idToText.get(v.option_id);
-                    if (!name) continue;
-                    langToCount.set(name, (langToCount.get(name) || 0) + 1);
+            for (const vote of votes) {
+                const optionText = idToText.get(vote.option_id);
+                if (optionText) {
+                    langToCount.set(optionText, (langToCount.get(optionText) || 0) + 1);
                     totalVotes += 1;
                 }
-
-                let agg = Array.from(langToCount.entries())
-                    .map(([name, count]) => ({ name, pct: totalVotes > 0 ? Math.round((count / totalVotes) * 100) : 0 }))
-                    .sort((a, b) => b.pct - a.pct)
-                    .slice(0, 50);
-
-                // Ensure user's latest language appears even if 0% in current range
-                if (latestLabel) {
-                    const lower = latestLabel.toLowerCase();
-                    if (!agg.some(r => String(r.name).toLowerCase() === lower)) {
-                        agg = [{ name: latestLabel, pct: 0 }, ...agg];
-                    }
-                }
-
-                if (!cancelled) { setLangAgg(agg); setUserLangs(userSet); }
-            } catch {
-                if (!cancelled) { setLangAgg([]); setUserLangs(new Set()); setCreatedCount(0); }
             }
-        })();
-        return () => { cancelled = true };
-    }, [supabase, polls, refreshByPollId, range, user?.id]);
+
+            // Calculate percentages and sort by vote count
+            let agg = Array.from(langToCount.entries())
+                .map(([name, count]) => ({
+                    name,
+                    pct: totalVotes > 0 ? Math.round((count / totalVotes) * 100) : 0,
+                    votes: count
+                }))
+                .sort((a, b) => b.votes - a.votes) // Sort by actual vote count, not percentage
+                .slice(0, 8); // Top 8 most voted languages
+
+            // Get user's votes for highlighting
+            const userVotes = votes.filter(v => v.user_id === user?.id);
+            const userSet = new Set<string>();
+            let latestLabel: string | undefined = undefined;
+
+            for (const uv of userVotes.slice(0, 1)) { // Get latest user vote
+                const name = idToText.get(uv.option_id);
+                if (name) {
+                    userSet.add(String(name).trim().toLowerCase());
+                    latestLabel = String(name);
+                    setMyLatestLanguage(name);
+                    setMyVoteInRange(true);
+                }
+            }
+
+            // Ensure user's latest language appears even if 0 votes in range
+            if (latestLabel && !agg.some(r => String(r.name).toLowerCase() === latestLabel.toLowerCase())) {
+                agg = [{ name: latestLabel, pct: 0, votes: 0 }, ...agg];
+            }
+
+            setLangAgg(agg);
+            setUserLangs(userSet);
+
+        } catch (error) {
+            console.error('Error updating chart data:', error);
+        }
+    }, [range, user?.id, supabase]);
+
+    // Initial data load
+    useEffect(() => {
+        fetchChartData();
+    }, [fetchChartData]);
 
     // No blocking spinner; render immediately and hydrate sections as data arrives
 
@@ -337,7 +297,7 @@ export default function PollsPage() {
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-background to-muted/20">
-            <div className="max-w-3xl mx-auto px-4 py-6 text-left">
+            <div className="max-w-4xl mx-auto px-3 sm:px-4 md:px-6 py-4 sm:py-6 text-left">
                 {user && (
                     <Card>
                         <CardContent className="p-4">
@@ -358,14 +318,18 @@ export default function PollsPage() {
                             )}
                             <div className="space-y-3">
                                 {myPolls.map((p) => (
-                                    <div key={p.id} className="flex items-center justify-between border rounded p-2">
-                                        <div className="min-w-0">
-                                            <div className="font-medium text-foreground truncate">{p.title}</div>
+                                    <div key={p.id} className="border rounded p-3">
+                                        <div className="mb-3">
+                                            <div className="font-medium text-foreground text-sm sm:text-base">{p.title}</div>
                                             <div className="text-xs text-muted-foreground">{new Date(p.created_at).toLocaleDateString()}</div>
                                         </div>
-                                        <div className="flex items-center gap-2">
-                                            <Button size="sm" variant="outline" onClick={() => router.push(`/polls/${p.id}`)}>View</Button>
-                                            <Button size="sm" variant="outline" onClick={() => router.push(`/polls/${p.id}/edit`)}>Edit</Button>
+                                        <div className="flex flex-wrap gap-2">
+                                            <Button size="sm" variant="outline" onClick={() => router.push(`/polls/${p.id}`)} className="flex-1 min-w-0">
+                                                View
+                                            </Button>
+                                            <Button size="sm" variant="outline" onClick={() => router.push(`/polls/${p.id}/edit`)} className="flex-1 min-w-0">
+                                                Edit
+                                            </Button>
                                             <Button
                                                 size="sm"
                                                 variant="destructive"
@@ -382,6 +346,7 @@ export default function PollsPage() {
                                                         setDeletingId(null);
                                                     }
                                                 }}
+                                                className="flex-1 min-w-0"
                                             >
                                                 {deletingId === p.id ? 'Deleting...' : 'Delete'}
                                             </Button>
@@ -393,25 +358,32 @@ export default function PollsPage() {
                     </Card>
                 )}
 
-                <div className="flex items-center gap-2 mb-4 text-sm">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-4 text-sm">
                     <span className="text-muted-foreground">Showing:</span>
-                    <Button variant={range==='24h'? 'default':'outline'} size="sm" onClick={() => setRange('24h')}>Last 24h</Button>
-                    <Button variant={range==='7d'? 'default':'outline'} size="sm" onClick={() => setRange('7d')}>Last 7 days</Button>
-                    <Button variant={range==='30d'? 'default':'outline'} size="sm" onClick={() => setRange('30d')}>Last 30 days</Button>
-                    <span className="ml-auto text-muted-foreground">Polls created in range: <strong>{createdCount}</strong></span>
+                    <div className="flex flex-wrap gap-2">
+                        <Button variant={range==='24h'? 'default':'outline'} size="sm" onClick={() => setRange('24h')}>Last 24h</Button>
+                        <Button variant={range==='7d'? 'default':'outline'} size="sm" onClick={() => setRange('7d')}>Last 7 days</Button>
+                        <Button variant={range==='30d'? 'default':'outline'} size="sm" onClick={() => setRange('30d')}>Last 30 days</Button>
+                                </div>
+                    <span className="text-muted-foreground text-xs sm:text-sm">Polls created in range: <strong>{createdCount}</strong></span>
                             </div>
 
                 <Card>
                         <CardContent className="p-4">
                             <div className="space-y-4">
                                 {/* Chart Visualization */}
-                                <div className="bg-card border rounded-lg p-4">
-                                    <h3 className="text-lg font-semibold mb-3 text-foreground">
-                                        Programming Language Popularity
+                                <div className="bg-card border rounded-lg p-3 sm:p-4 md:p-6 overflow-hidden">
+                                    <h3 className="text-sm sm:text-base md:text-lg font-semibold mb-2 text-foreground">
+                                        🏆 Programming Language Popularity Rankings
                                     </h3>
+                                    <p className="text-xs sm:text-sm text-muted-foreground mb-3">
+                                        Real-time comparison of programming languages by community votes.
+                                        See how languages rank against each other and track the most popular choices!
+                                    </p>
                                     <div
                                         role="img"
-                                        aria-label={`Bar chart showing programming language popularity. ${langAgg.length} languages displayed.`}
+                                        aria-label={`Horizontal bar chart showing the top ${langAgg.length} programming languages voted by all users on this platform. Languages are ranked by percentage of total votes.`}
+                                        className="overflow-x-auto"
                                     >
                                         <AggregatedLanguageChart data={langAgg} userLangs={userLangs} />
                                     </div>
@@ -428,24 +400,32 @@ export default function PollsPage() {
 
                                 {/* Detailed Breakdown Table */}
                                 <div className="space-y-2">
-                                    <h4 className="text-sm font-medium text-muted-foreground">Detailed Breakdown</h4>
-                                    <div className="divide-y border rounded">
+                                    <h4 className="text-sm font-medium text-muted-foreground">🏅 Language Comparison & Rankings</h4>
+                                    <p className="text-xs text-muted-foreground mb-3">
+                                        Compare vote counts and percentages. Your votes are highlighted in green!
+                                    </p>
+                                    <div className="divide-y border rounded overflow-x-auto">
                                         {langAgg.map((row) => {
                                             const mine = user && userLangs.has(String(row.name).trim().toLowerCase());
+                                            const rank = langAgg.findIndex(r => r.name === row.name) + 1;
                                             return (
-                                                <div key={row.name} className={`p-3 ${mine ? 'bg-green-50 dark:bg-green-950/20' : ''}`}>
+                                                <div key={row.name} className={`p-2 sm:p-3 ${mine ? 'bg-green-50 dark:bg-green-950/20' : ''}`}>
                                                     <div className="flex justify-between items-center mb-1">
-                                                        <div className="flex items-center space-x-2">
-                                                            <span className="font-medium text-foreground">{row.name}</span>
+                                                        <div className="flex items-center space-x-1 sm:space-x-2 min-w-0 flex-1">
+                                                            <span className="text-xs font-bold text-muted-foreground w-4">#{rank}</span>
+                                                            <span className="font-medium text-foreground text-xs sm:text-sm truncate">{row.name}</span>
                                                             {mine && (
-                                                                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300">
-                                                                    Your Vote
+                                                                <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 flex-shrink-0">
+                                                                    ⭐ Your Choice
                                                                 </span>
                                                             )}
                                                         </div>
-                                                        <span className="text-sm font-medium text-muted-foreground">{row.pct}%</span>
+                                                        <div className="text-right flex-shrink-0 ml-2">
+                                                            <div className="text-xs sm:text-sm font-medium text-muted-foreground">{row.pct}%</div>
+                                                            <div className="text-xs text-muted-foreground">({row.votes} votes)</div>
+                                                        </div>
                                                     </div>
-                                                    <div className={`h-2 w-full rounded-full overflow-hidden ${mine ? 'bg-green-200' : 'bg-primary/20'}`}>
+                                                    <div className={`h-1.5 sm:h-2 w-full rounded-full overflow-hidden ${mine ? 'bg-green-200' : 'bg-primary/20'}`}>
                                                         <div className={`${mine ? 'bg-green-600' : 'bg-primary'} h-full transition-all`} style={{ width: `${row.pct}%` }} />
                                                     </div>
                                                 </div>
@@ -456,6 +436,19 @@ export default function PollsPage() {
                                                 No votes in this range
                                             </div>
                                         )}
+                                    </div>
+
+                                    {/* Call to Action */}
+                                    <div className="mt-6 p-4 bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-950/20 dark:to-purple-950/20 rounded-lg border">
+                                        <div className="text-center">
+                                            <h4 className="font-semibold text-sm mb-2">🎯 Help Shape the Rankings!</h4>
+                                            <p className="text-xs text-muted-foreground mb-3">
+                                                Vote for your favorite programming languages on the home page and watch the rankings update in real-time!
+                                            </p>
+                                            <Button asChild size="sm" variant="outline" className="text-xs">
+                                                <Link href="/">🏠 Vote Now</Link>
+                                            </Button>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
