@@ -19,6 +19,7 @@ import Link from "next/link";
 import { ArrowLeft, CheckCircle, Clock, Users, Edit } from "lucide-react";
 import type { Poll, PollOption } from "@/lib/types";
 import { CommentList } from "@/components/comment-list";
+import { SharePoll } from "@/components/share-poll";
 import {
   BarChart,
   Bar,
@@ -372,6 +373,14 @@ function PollView() {
                     )}
                 </CardContent>
             </Card>
+
+            {/* Share Poll Section */}
+            <div className="mt-8">
+                <SharePoll
+                    pollId={pollId}
+                    pollTitle={poll.title}
+                />
+            </div>
 
             {/* Comments Section */}
             <div className="mt-8">

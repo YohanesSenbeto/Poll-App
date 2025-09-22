@@ -15,6 +15,7 @@ import { useAuth } from "./auth-context";
 import { Suspense } from "react";
 import { CommentList } from "@/components/comment-list";
 import { useState, useEffect } from "react";
+import QRCode from "qrcode";
 
 // Featured Poll Comments Component
 function FeaturedPollComments() {
