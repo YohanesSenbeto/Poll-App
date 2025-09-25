@@ -9,12 +9,13 @@ import {
     CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { BarChart3, PlusCircle, Users, MessageSquare } from "lucide-react";
+import { BarChart3, PlusCircle, Users, MessageSquare, TrendingUp, Star, Zap, Target } from "lucide-react";
 import Link from "next/link";
 import { useAuth } from "./auth-context";
 import { Suspense } from "react";
 import { useState, useEffect } from "react";
 import QRCode from "qrcode";
+import { FeaturedComments } from "@/components/featured-comments";
 
 // Featured Poll Comments Component - REMOVED (comments moved to bottom section)
 
@@ -349,35 +350,111 @@ function HomeContent() {
                     </p>
                 </div>
 
+                {/* Community Comments Section - Moved to Top */}
+                <FeaturedComments />
+
                 <div className="grid grid-cols-1 gap-6 lg:gap-8">
+                    {/* Statistics Cards */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <Card className="hover:shadow-lg transition-shadow">
+                            <CardContent className="p-4">
+                                <div className="flex items-center space-x-3">
+                                    <div className="w-10 h-10 bg-blue-100/50 dark:bg-blue-900/20 rounded-lg flex items-center justify-center">
+                                        <BarChart3 className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                                    </div>
+                                    <div>
+                                        <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">1,234</p>
+                                        <p className="text-sm text-gray-500">Total Polls</p>
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
+
+                        <Card className="hover:shadow-lg transition-shadow">
+                            <CardContent className="p-4">
+                                <div className="flex items-center space-x-3">
+                                    <div className="w-10 h-10 bg-green-100/50 dark:bg-green-900/20 rounded-lg flex items-center justify-center">
+                                        <Users className="w-5 h-5 text-green-600 dark:text-green-400" />
+                                    </div>
+                                    <div>
+                                        <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">5,678</p>
+                                        <p className="text-sm text-gray-500">Total Votes</p>
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
+
+                        <Card className="hover:shadow-lg transition-shadow">
+                            <CardContent className="p-4">
+                                <div className="flex items-center space-x-3">
+                                    <div className="w-10 h-10 bg-purple-100/50 dark:bg-purple-900/20 rounded-lg flex items-center justify-center">
+                                        <MessageSquare className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+                                    </div>
+                                    <div>
+                                        <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">2,345</p>
+                                        <p className="text-sm text-gray-500">Comments</p>
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
+
+                        <Card className="hover:shadow-lg transition-shadow">
+                            <CardContent className="p-4">
+                                <div className="flex items-center space-x-3">
+                                    <div className="w-10 h-10 bg-orange-100/50 dark:bg-orange-900/20 rounded-lg flex items-center justify-center">
+                                        <TrendingUp className="w-5 h-5 text-orange-600 dark:text-orange-400" />
+                                    </div>
+                                    <div>
+                                        <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">89%</p>
+                                        <p className="text-sm text-gray-500">Engagement</p>
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </div>
+
                     {/* Main Actions */}
                     <div className="space-y-4 sm:space-y-6">
-                    {user && (
-                    <Card className="hover:shadow-lg transition-shadow">
-                        <CardHeader>
-                            <div className="w-12 h-12 bg-green-100/50 dark:bg-green-900/20 rounded-lg flex items-center justify-center mb-4">
-                                <PlusCircle className="w-6 h-6 text-green-600 dark:text-green-400" />
-                            </div>
-                            <CardTitle className="text-lg">
-                                Create Poll
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <CardDescription className="text-sm text-muted-foreground mb-4">
-                                Create your own poll questions
-                            </CardDescription>
-                            <Button asChild className="w-full">
-                                <Link href="/polls/create">Create</Link>
-                            </Button>
-                        </CardContent>
-                    </Card>
-                        )}
-
                         <ProgrammingLanguageVoting />
-                                </div>
-                </div>
+                    </div>
 
-                {/* Comments section moved to right column above */}
+                    {/* Quick Actions */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <Card className="hover:shadow-lg transition-shadow">
+                            <CardContent className="p-4">
+                                <div className="flex items-center space-x-3">
+                                    <div className="w-10 h-10 bg-indigo-100/50 dark:bg-indigo-900/20 rounded-lg flex items-center justify-center">
+                                        <Star className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                                    </div>
+                                    <div className="flex-1">
+                                        <h3 className="font-semibold text-gray-900 dark:text-gray-100">Featured Polls</h3>
+                                        <p className="text-sm text-gray-500">Discover trending polls</p>
+                                    </div>
+                                    <Button asChild variant="outline" size="sm">
+                                        <Link href="/polls">Explore</Link>
+                                    </Button>
+                                </div>
+                            </CardContent>
+                        </Card>
+
+                        <Card className="hover:shadow-lg transition-shadow">
+                            <CardContent className="p-4">
+                                <div className="flex items-center space-x-3">
+                                    <div className="w-10 h-10 bg-pink-100/50 dark:bg-pink-900/20 rounded-lg flex items-center justify-center">
+                                        <Zap className="w-5 h-5 text-pink-600 dark:text-pink-400" />
+                                    </div>
+                                    <div className="flex-1">
+                                        <h3 className="font-semibold text-gray-900 dark:text-gray-100">Quick Vote</h3>
+                                        <p className="text-sm text-gray-500">Vote on recent polls</p>
+                                    </div>
+                                    <Button asChild variant="outline" size="sm">
+                                        <Link href="/polls">Vote Now</Link>
+                                    </Button>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </div>
+                </div>
             </div>
         </div>
     );

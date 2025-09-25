@@ -1,11 +1,9 @@
-import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
-import { cookies } from 'next/headers';
+import { createServerClient } from '@/lib/supabase-server';
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(request: NextRequest) {
     try {
-        const cookieStore = await cookies();
-        const supabase = createServerComponentClient({ cookies: () => Promise.resolve(cookieStore) });
+        const supabase = await createServerClient();
 
         // Get the authenticated user (or handle guest)
         const { data: { user }, error: authError } = await supabase.auth.getUser();

@@ -16,7 +16,40 @@ export const supabase = (() => {
         persistSession: true,
         detectSessionInUrl: true,
         flowType: 'pkce',
-        storage: typeof window !== 'undefined' ? window.localStorage : undefined,
+        storage: typeof window !== 'undefined' ? {
+          getItem: (key: string) => {
+            if (typeof window !== 'undefined') {
+              // Try localStorage first, then cookies as fallback
+              const localStorageValue = window.localStorage.getItem(key);
+              if (localStorageValue) {
+                // Also ensure it's in cookies for server access
+                document.cookie = `${key}=${encodeURIComponent(localStorageValue)}; path=/; max-age=31536000; SameSite=Lax`;
+                return localStorageValue;
+              }
+              
+              // Fallback to cookies
+              const cookies = document.cookie.split(';');
+              for (let cookie of cookies) {
+                const [name, value] = cookie.trim().split('=');
+                if (name === key) return decodeURIComponent(value);
+              }
+            }
+            return null;
+          },
+          setItem: (key: string, value: string) => {
+            if (typeof window !== 'undefined') {
+              // Store in both localStorage and cookies
+              window.localStorage.setItem(key, value);
+              document.cookie = `${key}=${encodeURIComponent(value)}; path=/; max-age=31536000; SameSite=Lax`;
+            }
+          },
+          removeItem: (key: string) => {
+            if (typeof window !== 'undefined') {
+              window.localStorage.removeItem(key);
+              document.cookie = `${key}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
+            }
+          }
+        } : undefined,
         storageKey: 'poll-app-auth',
       },
       global: {

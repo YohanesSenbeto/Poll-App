@@ -1,0 +1,97 @@
+schemaname,tablename,policyname,permissive,roles,cmd,qual,with_check
+public,admin_actions,Admins can create admin actions,PERMISSIVE,{public},INSERT,null,"(auth.uid() IN ( SELECT user_profiles.id
+   FROM user_profiles
+  WHERE ((user_profiles.role)::text = 'admin'::text)))"
+public,comment_votes,Anyone can view comment votes,PERMISSIVE,{public},SELECT,true,null
+public,comment_votes,Anyone can vote on comments,PERMISSIVE,{public},INSERT,null,"(EXISTS ( SELECT 1
+   FROM comments
+  WHERE ((comments.id = comment_votes.comment_id) AND (comments.is_deleted = false))))"
+public,comment_votes,Authenticated users can vote on comments,PERMISSIVE,{public},INSERT,null,"((auth.uid() = user_id) AND (comment_id IN ( SELECT comments.id
+   FROM comments
+  WHERE (comments.poll_id IN ( SELECT polls.id
+           FROM polls
+          WHERE (polls.is_active = true))))))"
+public,comment_votes,Users can delete own comment votes,PERMISSIVE,{public},DELETE,(auth.uid() = user_id),null
+public,comment_votes,Users can delete their own votes,PERMISSIVE,{public},DELETE,true,null
+public,comment_votes,Users can update own comment votes,PERMISSIVE,{public},UPDATE,(auth.uid() = user_id),null
+public,comment_votes,Users can update their own votes,PERMISSIVE,{public},UPDATE,true,true
+public,comment_votes,Users can view votes for visible comments,PERMISSIVE,{public},SELECT,"(comment_id IN ( SELECT comments.id
+   FROM comments
+  WHERE ((comments.poll_id IN ( SELECT polls.id
+           FROM polls
+          WHERE (polls.is_active = true))) AND (comments.is_deleted = false))))",null
+public,comments,Admins can delete any comment,PERMISSIVE,{public},DELETE,"(EXISTS ( SELECT 1
+   FROM user_profiles
+  WHERE ((user_profiles.id = auth.uid()) AND ((user_profiles.role)::text = ANY ((ARRAY['admin'::character varying, 'moderator'::character varying])::text[])))))",null
+public,comments,Anyone can create comments,PERMISSIVE,{public},INSERT,null,"(EXISTS ( SELECT 1
+   FROM polls
+  WHERE ((polls.id = comments.poll_id) AND (polls.is_active = true))))"
+public,comments,Authenticated users can create comments,PERMISSIVE,{public},INSERT,null,"((auth.uid() = user_id) AND (poll_id IN ( SELECT polls.id
+   FROM polls
+  WHERE (polls.is_active = true))))"
+public,comments,Universal comment create access,PERMISSIVE,{public},INSERT,null,true
+public,comments,Universal comment delete access,PERMISSIVE,{public},DELETE,true,null
+public,comments,Universal comment read access,PERMISSIVE,{public},SELECT,(is_deleted = false),null
+public,comments,Universal comment update access,PERMISSIVE,{public},UPDATE,true,true
+public,comments,Users can reply to any comment,PERMISSIVE,{public},INSERT,null,"((auth.uid() = user_id) AND (parent_id IS NOT NULL) AND (poll_id IN ( SELECT polls.id
+   FROM polls
+  WHERE (polls.is_active = true))))"
+public,comments,Users can soft delete own comments,PERMISSIVE,{public},UPDATE,(auth.uid() = user_id),null
+public,comments,Users can update own comments,PERMISSIVE,{public},UPDATE,((auth.uid() = user_id) AND (is_deleted = false)),null
+public,comments,Users can view comments for visible polls,PERMISSIVE,{public},SELECT,"((poll_id IN ( SELECT polls.id
+   FROM polls
+  WHERE (polls.is_active = true))) AND (is_deleted = false))",null
+public,daily_analytics,Only service role can view daily analytics,PERMISSIVE,{public},SELECT,(auth.role() = 'service_role'::text),null
+public,notification_preferences,Read own prefs,PERMISSIVE,{public},SELECT,(auth.uid() = user_id),null
+public,notification_preferences,Update own prefs,PERMISSIVE,{public},UPDATE,(auth.uid() = user_id),(auth.uid() = user_id)
+public,notification_preferences,Upsert own prefs,PERMISSIVE,{public},INSERT,null,(auth.uid() = user_id)
+public,options,Anyone can view poll options,PERMISSIVE,{public},SELECT,"(EXISTS ( SELECT 1
+   FROM polls
+  WHERE ((polls.id = options.poll_id) AND (polls.is_active = true))))",null
+public,options,Users can create options for own polls,PERMISSIVE,{authenticated},INSERT,null,"(EXISTS ( SELECT 1
+   FROM polls p
+  WHERE ((p.id = options.poll_id) AND (p.user_id = auth.uid()))))"
+public,options,Users can delete options for own polls,PERMISSIVE,{public},DELETE,"(poll_id IN ( SELECT polls.id
+   FROM polls
+  WHERE (polls.user_id = auth.uid())))",null
+public,options,Users can update options for own polls,PERMISSIVE,{public},UPDATE,"(poll_id IN ( SELECT polls.id
+   FROM polls
+  WHERE (polls.user_id = auth.uid())))",null
+public,options,Users can view options for visible polls,PERMISSIVE,{public},SELECT,"(poll_id IN ( SELECT polls.id
+   FROM polls
+  WHERE ((polls.is_active = true) OR (polls.user_id = auth.uid()))))",null
+public,poll_analytics,Users can view their own poll analytics,PERMISSIVE,{public},SELECT,(user_id = auth.uid()),null
+public,polls,Anyone can view active polls,PERMISSIVE,{public},SELECT,(is_active = true),null
+public,polls,Authenticated users can create polls,PERMISSIVE,{authenticated},INSERT,null,(auth.uid() = user_id)
+public,polls,Users and admins can view polls,PERMISSIVE,{public},SELECT,"((is_active = true) OR (auth.uid() = user_id) OR (auth.uid() IN ( SELECT user_profiles.id
+   FROM user_profiles
+  WHERE ((user_profiles.role)::text = 'admin'::text))))",null
+public,polls,Users can create polls,PERMISSIVE,{public},INSERT,null,(auth.uid() = user_id)
+public,polls,Users can delete own polls,PERMISSIVE,{public},DELETE,(auth.uid() = user_id),null
+public,polls,Users can update own polls,PERMISSIVE,{public},UPDATE,(auth.uid() = user_id),null
+public,polls,Users can view active polls,PERMISSIVE,{public},SELECT,((is_active = true) OR (user_id = auth.uid())),null
+public,polls,Users can view own polls,PERMISSIVE,{public},SELECT,(auth.uid() = user_id),null
+public,role_permissions,Authenticated users can view role permissions,PERMISSIVE,{public},SELECT,(auth.role() = 'authenticated'::text),null
+public,user_profiles,Anyone can view active profiles,PERMISSIVE,{public},SELECT,(is_active = true),null
+public,user_profiles,Universal user profile create access,PERMISSIVE,{public},INSERT,null,true
+public,user_profiles,Universal user profile read access,PERMISSIVE,{public},SELECT,true,null
+public,user_profiles,Universal user profile update access,PERMISSIVE,{public},UPDATE,true,true
+public,user_sessions,Users can delete their own sessions,PERMISSIVE,{public},DELETE,(user_id = auth.uid()),null
+public,user_sessions,Users can insert their own sessions,PERMISSIVE,{public},INSERT,null,(user_id = auth.uid())
+public,user_sessions,Users can update their own sessions,PERMISSIVE,{public},UPDATE,(user_id = auth.uid()),null
+public,user_sessions,Users can view their own sessions,PERMISSIVE,{public},SELECT,(user_id = auth.uid()),null
+public,votes,Anyone can view votes,PERMISSIVE,{public},SELECT,true,null
+public,votes,Anyone can vote on polls,PERMISSIVE,{public},INSERT,null,"(EXISTS ( SELECT 1
+   FROM polls
+  WHERE ((polls.id = votes.poll_id) AND (polls.is_active = true))))"
+public,votes,Authenticated users can vote,PERMISSIVE,{public},INSERT,null,(auth.uid() = user_id)
+public,votes,Users and admins can view votes,PERMISSIVE,{public},SELECT,"(poll_id IN ( SELECT polls.id
+   FROM polls
+  WHERE ((polls.is_active = true) OR (polls.user_id = auth.uid()) OR (auth.uid() IN ( SELECT user_profiles.id
+           FROM user_profiles
+          WHERE ((user_profiles.role)::text = 'admin'::text))))))",null
+public,votes,Users can create votes,PERMISSIVE,{public},INSERT,null,(auth.uid() = user_id)
+public,votes,Users can delete own poll votes,PERMISSIVE,{public},DELETE,(auth.uid() = user_id),null
+public,votes,Users can delete their own votes,PERMISSIVE,{public},DELETE,true,null
+public,votes,Users can update own poll votes,PERMISSIVE,{public},UPDATE,(auth.uid() = user_id),null
+public,votes,Users can update their own votes,PERMISSIVE,{public},UPDATE,true,true

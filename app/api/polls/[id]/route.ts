@@ -1,5 +1,4 @@
-import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
-import { cookies } from 'next/headers';
+import { createServerClient } from '@/lib/supabase-server';
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function GET(
@@ -7,8 +6,7 @@ export async function GET(
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const cookieStore = await cookies();
-        const supabase = createServerComponentClient({ cookies });
+        const supabase = await createServerClient();
 
         const { id: pollId } = await params;
 

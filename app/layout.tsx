@@ -7,7 +7,7 @@ import { NotificationContainer } from "@/components/ui/notification";
 import { ThemeProvider } from "./theme-context";
 import { Footer } from "@/components/footer";
 import { Suspense } from "react";
-import { PerformanceMonitor } from "@/components/performance-monitor";
+// import { PerformanceMonitor } from "@/components/performance-monitor"; // Removed component
 
 const geistSans = Geist({
     variable: "--font-geist-sans",
@@ -59,7 +59,6 @@ export default function RootLayout({
                 className={`${geistSans.variable} ${geistMono.variable} antialiased overflow-x-hidden`}
             >
                 <SkipLinks />
-                <PerformanceMonitor />
                 <ThemeProvider>
                     <AuthProvider>
                         <Navbar />

@@ -124,6 +124,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                     if (currentUser) {
                         console.log("Auth context - User object:", currentUser);
                         console.log("Auth context - User created_at:", currentUser.created_at);
+                        
+                        // Sync session to cookies for server access
+                        if (typeof window !== 'undefined' && session) {
+                            const sessionData = JSON.stringify(session);
+                            document.cookie = `poll-app-auth=${encodeURIComponent(sessionData)}; path=/; max-age=31536000; SameSite=Lax`;
+                            console.log("Auth context - Session synced to cookies");
+                        }
+                        
                         const { role, profile } = await checkUserRoleAndProfile(currentUser.id);
                         setUserRole(role);
                         setUserProfile(profile);
@@ -157,6 +165,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setUser(currentUser);
 
             if (currentUser) {
+                // Sync session to cookies for server access
+                if (typeof window !== 'undefined' && session) {
+                    const sessionData = JSON.stringify(session);
+                    document.cookie = `poll-app-auth=${encodeURIComponent(sessionData)}; path=/; max-age=31536000; SameSite=Lax`;
+                    console.log("Auth state change - Session synced to cookies");
+                }
+                
                 const { role, profile } = await checkUserRoleAndProfile(currentUser.id);
                 setUserRole(role);
                 setUserProfile(profile);

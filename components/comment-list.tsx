@@ -2,11 +2,11 @@
 
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent} from "@/components/ui/card";
-import { CommentForm } from "./comment-form";
-import { CommentItem } from "./comment-item";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { FacebookCommentForm } from "./facebook-comment-form";
+import { FacebookComment } from "./facebook-comment";
 import { useAuth } from "@/app/auth-context";
-import { MessageSquare, RefreshCw } from "lucide-react";
+import { MessageSquare, RefreshCw, Loader2, AlertCircle } from "lucide-react";
 
 interface Comment {
   id: string;
@@ -17,7 +17,10 @@ interface Comment {
   updated_at: string;
   user_id: string;
   poll_id: string;
-  parent_id: string | null;
+  parent_id?: string;
+  reply_count?: number;
+  like_count?: number;
+  dislike_count?: number;
   author?: {
     email?: string;
     display_name?: string;
@@ -43,11 +46,9 @@ export function CommentList({ pollId, className = "" }: CommentListProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [showReplies, setShowReplies] = useState<Record<string, boolean>>({});
 
   console.log('CommentList: Component rendered with pollId:', pollId);
-  console.log('CommentList: pollId type:', typeof pollId);
-  console.log('CommentList: pollId is truthy:', !!pollId);
-  console.log('CommentList: pollId length:', pollId?.length);
 
 
   // Fetch comments
@@ -62,14 +63,23 @@ export function CommentList({ pollId, className = "" }: CommentListProps) {
       console.log('CommentList: Fetching comments for pollId:', pollId);
       console.log('CommentList: pollId type:', typeof pollId);
       console.log('CommentList: pollId length:', pollId?.length);
+      console.log('CommentList: pollId value:', JSON.stringify(pollId));
       const apiUrl = `/api/comments?pollId=${pollId}`;
       console.log('CommentList: API URL:', apiUrl);
+      console.log('CommentList: About to make API call...');
       const response = await fetch(apiUrl);
       console.log('CommentList: API response status:', response.status);
       console.log('CommentList: API response URL:', response.url);
 
       if (!response.ok) {
-        const errorData = await response.json();
+        let errorData: any = {};
+        try {
+          errorData = await response.json();
+        } catch (e) {
+          // If response is not JSON, create a basic error object
+          errorData = { error: 'Unknown error occurred' };
+        }
+        
         console.error('CommentList: API error:', errorData);
 
         // If it's a table not found error, just show empty comments
@@ -81,6 +91,12 @@ export function CommentList({ pollId, className = "" }: CommentListProps) {
         // If it's a service unavailable error (table not set up), show helpful message
         if (response.status === 503) {
           setError('Comments system is being set up. Please try again later.');
+          return;
+        }
+
+        // Handle empty error objects gracefully
+        if (Object.keys(errorData).length === 0) {
+          setError('Unable to load comments. Please try again later.');
           return;
         }
 
@@ -189,8 +205,29 @@ export function CommentList({ pollId, className = "" }: CommentListProps) {
   // Handle delete
   const handleDelete = async (commentId: string) => {
     console.log('Delete comment:', commentId);
-    // Refresh comments to remove deleted comment
-    fetchComments();
+    
+    try {
+      const response = await fetch(`/api/comments/${commentId}`, {
+        method: 'DELETE',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (response.ok) {
+        console.log('Comment deleted successfully');
+        // Refresh comments to remove deleted comment
+        fetchComments();
+      } else {
+        const errorData = await response.json();
+        console.error('Failed to delete comment:', errorData);
+        setError(errorData.error || 'Failed to delete comment');
+      }
+    } catch (error) {
+      console.error('Error deleting comment:', error);
+      setError('Failed to delete comment');
+    }
   };
 
   // Handle report
@@ -199,41 +236,90 @@ export function CommentList({ pollId, className = "" }: CommentListProps) {
     // Could open a report modal or send a report
   };
 
-  // Organize comments into threads
+  // Organize comments into threads for Facebook-style display
   const organizeComments = (comments: Comment[]): Comment[] => {
     console.log('CommentList: Organizing comments, input count:', comments.length);
+    console.log('CommentList: Input comments:', comments.map(c => ({
+      id: c.id,
+      content: c.content?.substring(0, 30),
+      parent_id: c.parent_id,
+      poll_id: c.poll_id
+    })));
+    
+    // Sort comments by creation date (newest first for root comments)
+    const sortedComments = [...comments].sort((a, b) => 
+      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
+    
     const commentMap = new Map<string, Comment>();
     const rootComments: Comment[] = [];
 
     // First pass: create comment map
-    comments.forEach(comment => {
+    sortedComments.forEach(comment => {
       commentMap.set(comment.id, { ...comment, replies: [] });
     });
 
     console.log('CommentList: Comment map created with', commentMap.size, 'comments');
 
     // Second pass: organize into threads
-    comments.forEach(comment => {
+    sortedComments.forEach(comment => {
       const commentWithReplies = commentMap.get(comment.id)!;
 
-      if (comment.parent_id) {
+      if (comment.parent_id && comment.parent_id !== null) {
         const parent = commentMap.get(comment.parent_id);
         if (parent) {
           parent.replies = parent.replies || [];
           parent.replies.push(commentWithReplies);
+          console.log('CommentList: Added reply', comment.id, 'to parent', comment.parent_id);
+        } else {
+          console.log('CommentList: Parent not found for reply', comment.id, 'parent:', comment.parent_id);
         }
       } else {
         rootComments.push(commentWithReplies);
+        console.log('CommentList: Added root comment', comment.id);
+      }
+    });
+
+    // Sort replies by creation date (oldest first for replies)
+    rootComments.forEach(comment => {
+      if (comment.replies) {
+        comment.replies.sort((a, b) => 
+          new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+        );
+        console.log('CommentList: Comment', comment.id, 'has', comment.replies.length, 'replies');
       }
     });
 
     console.log('CommentList: Organized into', rootComments.length, 'root comments');
+    console.log('CommentList: Root comments:', rootComments.map(c => ({
+      id: c.id,
+      content: c.content?.substring(0, 30),
+      replyCount: c.replies?.length || 0
+    })));
     return rootComments;
   };
 
   const organizedComments = organizeComments(comments);
   console.log('CommentList: Total comments received:', comments.length);
   console.log('CommentList: Organized comments:', organizedComments.length);
+  
+  // Debug: Show all replies found
+  const allReplies = comments.filter(c => c.parent_id);
+  console.log('CommentList: All replies found:', allReplies.map(r => ({
+    id: r.id,
+    parent_id: r.parent_id,
+    content: r.content?.substring(0, 30)
+  })));
+  
+  // Debug: Show organized structure
+  console.log('CommentList: Organized structure:', organizedComments.map(c => ({
+    id: c.id,
+    content: c.content?.substring(0, 30),
+    replies: c.replies?.map(r => ({ id: r.id, content: r.content?.substring(0, 20) })) || []
+  })));
+  
+  // FORCE TEST: Show all replies directly
+  console.log('CommentList: FORCE TEST - All replies:', allReplies);
   
   // Debug: Check if comments have author data
   if (comments.length > 0) {
@@ -324,15 +410,46 @@ export function CommentList({ pollId, className = "" }: CommentListProps) {
         </Card>
       )}
 
-      {/* New comment form */}
-      <CommentForm
-        pollId={pollId}
-        onCommentSubmitted={() => {
-          console.log('CommentList: Comment submitted, refreshing comments...');
-          // Refresh comments to show the new one
-          fetchComments();
-        }}
-      />
+      {/* New comment form - Only for authenticated users */}
+      {user ? (
+        <FacebookCommentForm
+          pollId={pollId}
+          onCommentAdded={() => {
+            console.log('CommentList: Comment submitted, refreshing comments...');
+            // Refresh comments to show the new one
+            fetchComments();
+          }}
+        />
+      ) : (
+        <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+          <div className="flex items-center space-x-3">
+            <div className="p-2 bg-blue-100 dark:bg-blue-800 rounded-full">
+              <MessageSquare className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+            </div>
+            <div>
+              <h4 className="font-semibold text-blue-900 dark:text-blue-100">Join the Discussion</h4>
+              <p className="text-sm text-blue-700 dark:text-blue-300">
+                Please <a href="/auth/login" className="underline hover:no-underline">log in</a> to share your thoughts and connect with other users.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* FORCE TEST: Show all replies directly */}
+      {allReplies.length > 0 && (
+        <div className="mb-4 p-4 bg-yellow-100 border border-yellow-300 rounded">
+          <h3 className="font-bold text-yellow-800">FORCE TEST - All Replies Found:</h3>
+          {allReplies.map(reply => (
+            <div key={reply.id} className="mt-2 p-2 bg-white rounded border">
+              <strong>Reply ID:</strong> {reply.id}<br/>
+              <strong>Parent ID:</strong> {reply.parent_id}<br/>
+              <strong>Content:</strong> {reply.content}<br/>
+              <strong>User:</strong> {reply.user_id}
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Comments list */}
       <div className="space-y-4">
@@ -353,15 +470,44 @@ export function CommentList({ pollId, className = "" }: CommentListProps) {
           </Card>
         ) : (
           organizedComments.map((comment) => (
-            <CommentItem
-              key={comment.id}
-              comment={comment}
-              onVote={handleVote}
-              onReply={handleReply}
-              onEdit={handleEdit}
-              onDelete={handleDelete}
-              onReport={handleReport}
-            />
+            <div key={comment.id}>
+              <FacebookComment
+                comment={comment}
+                onVote={handleVote}
+                onReply={handleReply}
+                onEdit={handleEdit}
+                onDelete={handleDelete}
+                pollId={pollId}
+                currentUserId={user?.id}
+                onCommentAdded={fetchComments}
+                showReplies={showReplies[comment.id] || false}
+                onToggleReplies={() => {
+                  setShowReplies(prev => ({
+                    ...prev,
+                    [comment.id]: !prev[comment.id]
+                  }));
+                }}
+              />
+              {/* Render replies when toggled */}
+              {comment.replies && comment.replies.length > 0 && (
+                <div className="ml-12 space-y-2">
+                  {comment.replies.map((reply) => (
+                    <FacebookComment
+                      key={reply.id}
+                      comment={reply}
+                      onVote={handleVote}
+                      onReply={handleReply}
+                      onEdit={handleEdit}
+                      onDelete={handleDelete}
+                      onCommentAdded={fetchComments}
+                      pollId={pollId}
+                      currentUserId={user?.id}
+                      isReply={true}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
           ))
         )}
       </div>

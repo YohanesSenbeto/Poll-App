@@ -18,8 +18,7 @@
     "jsx": "preserve",
     "types": [
       "react",
-      "react-dom",
-      "node"
+      "react-dom"
     ],
     "forceConsistentCasingInFileNames": true,
     "incremental": true,
