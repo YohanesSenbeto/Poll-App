@@ -4,9 +4,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import Link from "next/link";
 
-// Force dynamic rendering for admin pages that need authentication
-export const dynamic = 'force-dynamic';
-
 // Force dynamic rendering since we use cookies
 export const dynamic = 'force-dynamic';
 
