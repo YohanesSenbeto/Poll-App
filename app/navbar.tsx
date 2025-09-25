@@ -164,6 +164,7 @@ export function Navbar() {
                                             </Link>
                                         </DropdownMenuItem>
                                     )}
+                                    {/* Removed Auth & DB Test button */}
                                     <DropdownMenuSeparator />
                                     <DropdownMenuItem
                                         onClick={handleLogout}

@@ -157,14 +157,6 @@ export function NotificationPreferencesComponent({ className }: NotificationPref
               </div>
               <p className="text-xs text-amber-700 mt-1">
                 Email notifications require Resend API key configuration.
-                <a
-                  href="/test-email"
-                  className="underline hover:no-underline ml-1"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  Test email system →
-                </a>
               </p>
             </div>
 
