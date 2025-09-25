@@ -13,69 +13,10 @@ import { BarChart3, PlusCircle, Users, MessageSquare } from "lucide-react";
 import Link from "next/link";
 import { useAuth } from "./auth-context";
 import { Suspense } from "react";
-import { CommentList } from "@/components/comment-list";
 import { useState, useEffect } from "react";
 import QRCode from "qrcode";
 
-// Featured Poll Comments Component
-function FeaturedPollComments() {
-    const [featuredPollId, setFeaturedPollId] = useState<string | null>(null);
-    const { user } = useAuth();
-
-    useEffect(() => {
-        // Get a featured poll ID - you can modify this to get a specific poll
-        // For now, we'll use a placeholder that users can replace
-        const pollId = "950cd588-0ffc-4cdb-8fdf-039318533ada"; // Replace with your featured poll ID
-        setFeaturedPollId(pollId);
-    }, []);
-
-    if (!featuredPollId) {
-        return (
-            <Card className="hover:shadow-lg transition-shadow">
-                <CardHeader>
-                    <div className="w-12 h-12 bg-orange-100/50 dark:bg-orange-900/20 rounded-lg flex items-center justify-center mb-4">
-                        <MessageSquare className="w-6 h-6 text-orange-600 dark:text-orange-400" />
-                    </div>
-                    <CardTitle className="text-lg">
-                        Community Discussion
-                    </CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <CardDescription className="text-sm text-muted-foreground mb-4">
-                        Join the conversation and share your thoughts
-                    </CardDescription>
-                    <div className="text-center py-4">
-                        <p className="text-sm text-muted-foreground">
-                            Loading discussion...
-                        </p>
-                    </div>
-                </CardContent>
-            </Card>
-        );
-    }
-
-    return (
-        <div className="space-y-4">
-            <Card className="hover:shadow-lg transition-shadow">
-                <CardHeader>
-                    <div className="w-12 h-12 bg-orange-100/50 dark:bg-orange-900/20 rounded-lg flex items-center justify-center mb-4">
-                        <MessageSquare className="w-6 h-6 text-orange-600 dark:text-orange-400" />
-                    </div>
-                    <CardTitle className="text-lg">
-                        Community Discussion
-                    </CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <CardDescription className="text-sm text-muted-foreground mb-4">
-                        Join the conversation and share your thoughts about programming languages
-                    </CardDescription>
-                </CardContent>
-            </Card>
-            
-            <CommentList pollId={featuredPollId} className="max-h-96 overflow-y-auto" />
-        </div>
-    );
-}
+// Featured Poll Comments Component - REMOVED (comments moved to bottom section)
 
 // Loading skeleton component
 function LoadingSkeleton() {
@@ -109,6 +50,7 @@ function LoadingSkeleton() {
 function ProgrammingLanguageVoting() {
     const { user } = useAuth();
     const [selectedLanguage, setSelectedLanguage] = useState<string | null>(null);
+    const [guestName, setGuestName] = useState("");
     const [voting, setVoting] = useState(false);
     const [voted, setVoted] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -133,7 +75,10 @@ function ProgrammingLanguageVoting() {
     const displayedLanguages = showAllLanguages ? programmingLanguages : initialLanguages;
 
     const handleVote = async (language: string) => {
-        if (!user) return;
+        if (!user && !guestName.trim()) {
+            setError("Please enter your name to vote as a guest");
+            return;
+        }
 
         setVoting(true);
         setError(null);
@@ -146,8 +91,9 @@ function ProgrammingLanguageVoting() {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    pollId: '950cd588-0ffc-4cdb-8fdf-039318533ada', // Programming languages poll
+                    pollId: '724a499d-dd5d-4758-af5f-47d771f242a9', // This is my Mention poll
                     optionText: language,
+                    guestName: user ? null : guestName.trim(),
                 }),
             });
 
@@ -159,6 +105,9 @@ function ProgrammingLanguageVoting() {
             const result = await response.json();
             setSelectedLanguage(language);
             setVoted(true);
+            if (!user) {
+                setGuestName("");
+            }
 
             // Small delay to let the database update, then refresh the page with charts
             setTimeout(() => {
@@ -186,11 +135,76 @@ function ProgrammingLanguageVoting() {
                 </CardHeader>
                 <CardContent>
                     <CardDescription className="text-sm text-muted-foreground mb-4">
-                        Sign up to vote for your favorite programming language
+                        Vote on "This is my Mention" poll - choose your favorite programming language
                     </CardDescription>
-                    <Button asChild className="w-full">
-                        <Link href="/auth/register">Sign Up to Vote</Link>
+                    
+                    <div className="space-y-3">
+                        <div>
+                            <label className="text-sm font-medium mb-2 block">Your Name (for guest voting)</label>
+                            <input
+                                type="text"
+                                value={guestName}
+                                onChange={(e) => setGuestName(e.target.value)}
+                                placeholder="Enter your name..."
+                                className="w-full px-3 py-2 border rounded-md bg-background text-sm"
+                            />
+                        </div>
+                        
+                        {error && (
+                            <div className="text-xs text-red-600 bg-red-50 dark:bg-red-950/20 p-2 rounded border border-red-200 dark:border-red-800">
+                                {error}
+                            </div>
+                        )}
+
+                        {displayedLanguages.map((lang) => (
+                            <Button
+                                key={lang.name}
+                                variant="outline"
+                                className={`w-full justify-start h-12 text-left ${
+                                    selectedLanguage === lang.name
+                                        ? 'border-primary bg-primary/10'
+                                        : 'hover:bg-muted'
+                                }`}
+                                onClick={() => handleVote(lang.name)}
+                                disabled={voting || !guestName.trim()}
+                            >
+                                <div className="flex items-center justify-between w-full">
+                                    <span className="font-medium">{lang.name}</span>
+                                    {voting && selectedLanguage === lang.name && (
+                                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
+                                    )}
+                                </div>
+                            </Button>
+                        ))}
+
+                        {!showAllLanguages && programmingLanguages.length > 6 && (
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setShowAllLanguages(true)}
+                                className="w-full text-xs"
+                            >
+                                See More Languages ({programmingLanguages.length - 6} more)
+                            </Button>
+                        )}
+
+                        {showAllLanguages && (
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setShowAllLanguages(false)}
+                                className="w-full text-xs"
+                            >
+                                Show Less
+                            </Button>
+                        )}
+
+                        <div className="pt-2 border-t pt-3">
+                            <Button asChild variant="ghost" size="sm" className="w-full text-xs">
+                                <Link href="/polls">View Live Charts & Vote Counts</Link>
                     </Button>
+                        </div>
+                    </div>
                 </CardContent>
             </Card>
         );
@@ -208,7 +222,7 @@ function ProgrammingLanguageVoting() {
             </CardHeader>
             <CardContent>
                 <CardDescription className="text-sm text-muted-foreground mb-4">
-                    Choose your favorite programming language from the options below
+                    Vote on "This is my Mention" poll - choose your favorite programming language
                 </CardDescription>
                 
                 {!voted ? (
@@ -335,8 +349,8 @@ function HomeContent() {
                     </p>
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8">
-                    {/* Left Column - Main Actions */}
+                <div className="grid grid-cols-1 gap-6 lg:gap-8">
+                    {/* Main Actions */}
                     <div className="space-y-4 sm:space-y-6">
                     {user && (
                     <Card className="hover:shadow-lg transition-shadow">
@@ -360,13 +374,10 @@ function HomeContent() {
                         )}
 
                         <ProgrammingLanguageVoting />
-                    </div>
-
-                    {/* Right Column - Comments */}
-                    <div className="space-y-4 sm:space-y-6">
-                        <FeaturedPollComments />
                                 </div>
                 </div>
+
+                {/* Comments section moved to right column above */}
             </div>
         </div>
     );

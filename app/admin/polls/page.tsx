@@ -5,6 +5,9 @@ import { Progress } from "@/components/ui/progress";
 import Link from "next/link";
 // Import the chart component directly - it will handle client-side rendering
 
+// Force dynamic rendering since we use cookies
+export const dynamic = 'force-dynamic';
+
 interface PollOption {
     id: string;
     text: string;

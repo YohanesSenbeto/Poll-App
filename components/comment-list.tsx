@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent} from "@/components/ui/card";
 import { CommentForm } from "./comment-form";
 import { CommentItem } from "./comment-item";
 import { useAuth } from "@/app/auth-context";
@@ -18,6 +18,12 @@ interface Comment {
   user_id: string;
   poll_id: string;
   parent_id: string | null;
+  author?: {
+    email?: string;
+    display_name?: string;
+    username?: string;
+    avatar_url?: string;
+  } | null;
   votes?: {
     upvotes: number;
     downvotes: number;
@@ -38,15 +44,33 @@ export function CommentList({ pollId, className = "" }: CommentListProps) {
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
+  console.log('CommentList: Component rendered with pollId:', pollId);
+  console.log('CommentList: pollId type:', typeof pollId);
+  console.log('CommentList: pollId is truthy:', !!pollId);
+  console.log('CommentList: pollId length:', pollId?.length);
+
 
   // Fetch comments
   const fetchComments = async () => {
+    if (!pollId) {
+      console.log('CommentList: No pollId provided, skipping fetch');
+      return;
+    }
+    
     try {
       setError(null);
-      const response = await fetch(`/api/comments?pollId=${pollId}`);
+      console.log('CommentList: Fetching comments for pollId:', pollId);
+      console.log('CommentList: pollId type:', typeof pollId);
+      console.log('CommentList: pollId length:', pollId?.length);
+      const apiUrl = `/api/comments?pollId=${pollId}`;
+      console.log('CommentList: API URL:', apiUrl);
+      const response = await fetch(apiUrl);
+      console.log('CommentList: API response status:', response.status);
+      console.log('CommentList: API response URL:', response.url);
 
       if (!response.ok) {
         const errorData = await response.json();
+        console.error('CommentList: API error:', errorData);
 
         // If it's a table not found error, just show empty comments
         if (response.status === 500 && errorData.details?.includes('Could not find the table')) {
@@ -66,8 +90,12 @@ export function CommentList({ pollId, className = "" }: CommentListProps) {
       const data = await response.json();
       console.log('CommentList: API Response data:', data);
       console.log('CommentList: Comments from API:', data.comments?.length || 0);
+      console.log('CommentList: Sample comment with author:', data.comments?.[0]);
+      console.log('CommentList: First comment author data:', data.comments?.[0]?.author);
+      console.log('CommentList: First comment user_id:', data.comments?.[0]?.user_id);
       setComments(data.comments || []);
     } catch (error) {
+      console.error('CommentList: Fetch error:', error);
       setError(error instanceof Error ? error.message : 'Failed to load comments');
     } finally {
       setLoading(false);
@@ -76,7 +104,9 @@ export function CommentList({ pollId, className = "" }: CommentListProps) {
   };
 
   useEffect(() => {
-    fetchComments();
+    if (pollId) {
+      fetchComments();
+    }
   }, [pollId]);
 
   // Vote on comment
@@ -93,8 +123,50 @@ export function CommentList({ pollId, className = "" }: CommentListProps) {
       });
 
       if (response.ok) {
-        // Refresh comments to show updated vote counts
-        fetchComments();
+        // Update the specific comment's vote count in state instead of refetching all
+        const data = await response.json();
+        if (data.success) {
+          setComments(prevComments => 
+            prevComments.map(comment => {
+              if (comment.id === commentId) {
+                const currentVote = comment.votes?.user_vote || 0;
+                let newUpvotes = comment.votes?.upvotes || 0;
+                let newDownvotes = comment.votes?.downvotes || 0;
+                let newUserVote: number | null = null;
+
+                if (data.action === 'removed') {
+                  // Vote was removed
+                  if (currentVote === 1) newUpvotes--;
+                  if (currentVote === -1) newDownvotes--;
+                } else if (data.action === 'updated') {
+                  // Vote was changed
+                  if (currentVote === 1) newUpvotes--;
+                  if (currentVote === -1) newDownvotes--;
+                  if (voteType === 1) newUpvotes++;
+                  if (voteType === -1) newDownvotes++;
+                  newUserVote = voteType;
+                } else if (data.action === 'created') {
+                  // New vote was created
+                  if (voteType === 1) newUpvotes++;
+                  if (voteType === -1) newDownvotes++;
+                  newUserVote = voteType;
+                }
+
+                return {
+                  ...comment,
+                  votes: {
+                    upvotes: newUpvotes,
+                    downvotes: newDownvotes,
+                    user_vote: newUserVote
+                  }
+                };
+              }
+              return comment;
+            })
+          );
+        }
+      } else {
+        console.error('Failed to vote on comment');
       }
     } catch (error) {
       console.error('Error voting on comment:', error);
@@ -110,23 +182,15 @@ export function CommentList({ pollId, className = "" }: CommentListProps) {
   // Handle edit
   const handleEdit = (commentId: string) => {
     console.log('Edit comment:', commentId);
+    // Refresh comments to show updated content
+    fetchComments();
   };
 
   // Handle delete
   const handleDelete = async (commentId: string) => {
-    if (!confirm('Are you sure you want to delete this comment?')) return;
-
-    try {
-      const response = await fetch(`/api/comments/${commentId}`, {
-        method: "DELETE",
-      });
-
-      if (response.ok) {
-        fetchComments();
-      }
-    } catch (error) {
-      console.error('Error deleting comment:', error);
-    }
+    console.log('Delete comment:', commentId);
+    // Refresh comments to remove deleted comment
+    fetchComments();
   };
 
   // Handle report
@@ -170,6 +234,31 @@ export function CommentList({ pollId, className = "" }: CommentListProps) {
   const organizedComments = organizeComments(comments);
   console.log('CommentList: Total comments received:', comments.length);
   console.log('CommentList: Organized comments:', organizedComments.length);
+  
+  // Debug: Check if comments have author data
+  if (comments.length > 0) {
+    console.log('CommentList: First comment full data:', JSON.stringify(comments[0], null, 2));
+    console.log('CommentList: All comments author status:', comments.map(c => ({
+      id: c.id,
+      user_id: c.user_id,
+      has_author: !!c.author,
+      author_data: c.author
+    })));
+  }
+
+  if (!pollId) {
+    return (
+      <Card className={className}>
+        <CardContent className="pt-6">
+          <div className="text-center text-red-600">
+            <p>Error: No poll ID provided to CommentList component</p>
+            <p className="text-sm text-muted-foreground mt-2">pollId: {String(pollId)}</p>
+            <p className="text-xs text-muted-foreground mt-1">Type: {typeof pollId}</p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   if (loading) {
     return (
@@ -238,7 +327,11 @@ export function CommentList({ pollId, className = "" }: CommentListProps) {
       {/* New comment form */}
       <CommentForm
         pollId={pollId}
-        onCommentSubmitted={fetchComments}
+        onCommentSubmitted={() => {
+          console.log('CommentList: Comment submitted, refreshing comments...');
+          // Refresh comments to show the new one
+          fetchComments();
+        }}
       />
 
       {/* Comments list */}

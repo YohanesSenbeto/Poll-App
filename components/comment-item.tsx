@@ -64,6 +64,16 @@ export function CommentItem({
   const { user } = useAuth();
   const [showReplyForm, setShowReplyForm] = useState(false);
   const [showReplies, setShowReplies] = useState(level < 2); // Show first 2 levels by default
+  const [isEditing, setIsEditing] = useState(false);
+  const [editContent, setEditContent] = useState(comment.content);
+
+  // Debug logging
+  console.log('CommentItem: Rendering comment:', {
+    id: comment.id,
+    user_id: comment.user_id,
+    author: comment.author,
+    content: comment.content?.substring(0, 50)
+  });
 
   const isAuthor = user?.id === comment.user_id;
   const isAdmin = user?.user_metadata?.role === 'admin' || user?.user_metadata?.role === 'moderator';
@@ -71,6 +81,49 @@ export function CommentItem({
   const handleVote = (voteType: 1 | -1) => {
     if (!user) return;
     onVote?.(comment.id, voteType);
+  };
+
+  const handleEdit = async () => {
+    if (!editContent.trim()) return;
+    
+    try {
+      const response = await fetch(`/api/comments/${comment.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          content: editContent.trim(),
+        }),
+      });
+
+      if (response.ok) {
+        setIsEditing(false);
+        onEdit?.(comment.id);
+      } else {
+        console.error('Failed to edit comment');
+      }
+    } catch (error) {
+      console.error('Error editing comment:', error);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!confirm('Are you sure you want to delete this comment?')) return;
+    
+    try {
+      const response = await fetch(`/api/comments/${comment.id}`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        onDelete?.(comment.id);
+      } else {
+        console.error('Failed to delete comment');
+      }
+    } catch (error) {
+      console.error('Error deleting comment:', error);
+    }
   };
 
   if (comment.is_deleted) {
@@ -102,7 +155,7 @@ export function CommentItem({
               <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
                 <div className="flex items-center gap-2">
                   <span className="font-semibold text-xs sm:text-sm">
-                    {comment.author?.display_name || comment.author?.username || comment.author?.email || `User ${comment.user_id?.substring(0, 8)}`}
+                    {comment.author?.display_name || comment.author?.username || comment.author?.email?.split('@')[0] || `User ${comment.user_id?.substring(0, 8)}`}
                   </span>
                   {isAuthor && (
                     <Badge variant="secondary" className="text-xs px-1.5 py-0.5">You</Badge>
@@ -124,7 +177,39 @@ export function CommentItem({
               </div>
 
               <div className="bg-muted/30 rounded-lg p-3 sm:p-4">
-                <p className="text-xs sm:text-sm leading-relaxed whitespace-pre-wrap">{comment.content}</p>
+                {isEditing ? (
+                  <div className="space-y-3">
+                    <textarea
+                      value={editContent}
+                      onChange={(e) => setEditContent(e.target.value)}
+                      className="w-full p-3 border rounded-md resize-none text-sm"
+                      rows={3}
+                    />
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        onClick={handleEdit}
+                        disabled={!editContent.trim()}
+                        className="text-xs"
+                      >
+                        Save
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setIsEditing(false);
+                          setEditContent(comment.content);
+                        }}
+                        className="text-xs"
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-xs sm:text-sm leading-relaxed whitespace-pre-wrap">{comment.content}</p>
+                )}
               </div>
 
               {/* Action buttons */}
@@ -181,8 +266,36 @@ export function CommentItem({
                 {/* Action menu */}
                 <div className="flex items-center gap-1">
                   {isAuthor && (
-                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0 hover:bg-muted">
-                      <MoreHorizontal className="h-4 w-4" />
+                    <>
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={() => setIsEditing(true)}
+                        className="h-8 px-2 text-xs hover:bg-muted"
+                      >
+                        <Edit className="h-3 w-3 mr-1" />
+                        Edit
+                      </Button>
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={handleDelete}
+                        className="h-8 px-2 text-xs hover:bg-red-100 hover:text-red-700"
+                      >
+                        <Trash2 className="h-3 w-3 mr-1" />
+                        Delete
+                      </Button>
+                    </>
+                  )}
+                  {isAdmin && !isAuthor && (
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      onClick={handleDelete}
+                      className="h-8 px-2 text-xs hover:bg-red-100 hover:text-red-700"
+                    >
+                      <Trash2 className="h-3 w-3 mr-1" />
+                      Delete
                     </Button>
                   )}
                 </div>
@@ -195,7 +308,7 @@ export function CommentItem({
                     pollId={comment.poll_id}
                     parentId={comment.id}
                     onCommentSubmitted={() => setShowReplyForm(false)}
-                    placeholder={`Reply to ${comment.user_id?.substring(0, 8) || 'user'}...`}
+                    placeholder={`Reply to ${comment.author?.display_name || comment.author?.username || comment.author?.email?.split('@')[0] || 'user'}...`}
                   />
                 </div>
               )}

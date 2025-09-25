@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback, memo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/app/auth-context";
-import { supabase } from "@/lib/supabase";
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -143,8 +143,9 @@ interface UserProfile {
 interface LangAggRow { name: string; pct: number; count: number }
 
 export default function ProfilePage() {
-    const { user, loading } = useAuth();
+    const { user, loading, refreshUserProfile } = useAuth();
     const router = useRouter();
+    const supabase = createClientComponentClient();
     const [profile, setProfile] = useState<UserProfile | null>(null);
     const [loadingProfile, setLoadingProfile] = useState(true);
     const [updating, setUpdating] = useState(false);
@@ -173,6 +174,70 @@ export default function ProfilePage() {
     const [uniqueLanguages, setUniqueLanguages] = useState(0);
     const [pollsParticipated, setPollsParticipated] = useState(0);
     const [commentsCount, setCommentsCount] = useState(0);
+    const [accountCreationDate, setAccountCreationDate] = useState<string>("Loading...");
+
+    // Helper function to safely format dates
+    const formatDate = (dateString: string | null | undefined): string => {
+        if (!dateString) return "Unknown";
+        
+        try {
+            const date = new Date(dateString);
+            if (isNaN(date.getTime())) return "Unknown";
+            
+            return date.toLocaleDateString("en-US", {
+                year: "numeric",
+                month: "long",
+                day: "numeric",
+            });
+        } catch (error) {
+            console.warn("Error formatting date:", error);
+            return "Unknown";
+        }
+    };
+
+    // Helper function to get account creation date from auth.users table
+    const getAccountCreationDate = async (): Promise<string> => {
+        if (!user?.email) {
+            console.warn("No user email found");
+            return "Unknown";
+        }
+
+        try {
+            // Use RPC function to safely access auth.users table
+            const { data, error } = await supabase.rpc('get_user_creation_date', {
+                user_email: user.email
+            });
+
+            if (error) {
+                console.warn("Error fetching user creation date:", error);
+                return "Unknown";
+            }
+
+            if (!data) {
+                console.warn("No creation date found");
+                return "Unknown";
+            }
+
+            console.log("Account creation date from RPC:", data);
+            return formatDate(data);
+        } catch (error) {
+            console.warn("Exception fetching account creation date:", error);
+            return "Unknown";
+        }
+    };
+
+    // Function to fetch account creation date
+    const fetchAccountCreationDate = useCallback(async () => {
+        if (!user?.email) return;
+        
+        try {
+            const creationDate = await getAccountCreationDate();
+            setAccountCreationDate(creationDate);
+        } catch (error) {
+            console.error("Error fetching account creation date:", error);
+            setAccountCreationDate("Unknown");
+        }
+    }, [user?.email]);
 
     // Function to fetch user statistics
     const fetchUserStatistics = useCallback(async () => {
@@ -257,6 +322,7 @@ export default function ProfilePage() {
             fetchProfile();
             checkStorageStatus();
             fetchUserStatistics();
+            fetchAccountCreationDate();
         }
     }, [user]);
 
@@ -372,7 +438,7 @@ export default function ProfilePage() {
                     username: '',
                     avatar_url: '',
                     bio: '',
-                    created_at: new Date().toISOString(),
+                    created_at: user.created_at || new Date().toISOString(),
                     updated_at: new Date().toISOString()
                 };
 
@@ -392,7 +458,7 @@ export default function ProfilePage() {
                 username: data.username || '',
                 avatar_url: data.avatar_url || '',
                 bio: data.bio || '',
-                created_at: prev?.created_at || '',
+                created_at: user.created_at || new Date().toISOString(),
                 updated_at: new Date().toISOString(),
             }));
             setFullName(data.display_name || '');
@@ -476,6 +542,19 @@ export default function ProfilePage() {
         setError(null);
 
         try {
+            // Verify user session is valid
+            const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+            if (sessionError || !session) {
+                console.error("Session error:", sessionError);
+                throw new Error("User session is invalid. Please log in again.");
+            }
+            
+            console.log("User session verified:", { 
+                userId: session.user.id, 
+                email: session.user.email,
+                expiresAt: session.expires_at 
+            });
+
             // Check if avatars bucket exists
             const { data: buckets, error: bucketError } =
                 await supabase.storage.listBuckets();
@@ -522,13 +601,16 @@ export default function ProfilePage() {
             }
 
             // Upload new avatar (upsert + content type)
-            const { error: uploadError } = await supabase.storage
+            console.log("Attempting storage upload...");
+            const { data: uploadData, error: uploadError } = await supabase.storage
                 .from("avatars")
                 .upload(filePath, avatarFile, {
                     cacheControl: "3600",
                     upsert: true,
                     contentType: avatarFile.type || "image/*",
                 });
+
+            console.log("Storage upload result:", { uploadData, uploadError });
 
             if (uploadError) {
                 console.error("Upload error details:", {
@@ -548,23 +630,34 @@ export default function ProfilePage() {
                 );
             }
 
+            console.log("Storage upload successful:", uploadData);
+
             // Get public URL
             const {
                 data: { publicUrl },
             } = supabase.storage.from("avatars").getPublicUrl(filePath);
 
             // Persist avatar URL into profile table for consistency
-            const { error: avatarSaveError } = await supabase
+            console.log("Updating user profile with avatar URL:", publicUrl);
+            const { data: updateData, error: avatarSaveError } = await supabase
                 .from('user_profiles')
-                .update({ avatar_url: publicUrl, updated_at: new Date().toISOString() })
-                .eq('id', user.id);
+                .update({ avatar_url: publicUrl })
+                .eq('id', user.id)
+                .select();
+
+            console.log("Profile update result:", { updateData, avatarSaveError });
 
             if (avatarSaveError) {
-                console.warn("Avatar URL DB save warning:", avatarSaveError);
+                console.error("Avatar URL DB save error:", avatarSaveError);
+                throw new Error(`Failed to save avatar URL: ${avatarSaveError.message}`);
             }
 
             // Update local state
             setProfile((prev) => (prev ? { ...prev, avatar_url: publicUrl } : prev));
+            
+            // Refresh user profile in auth context to update navbar
+            await refreshUserProfile();
+            
             setSuccess("Avatar updated successfully!");
             return true;
         } catch (error: any) {
@@ -1398,13 +1491,7 @@ export default function ProfilePage() {
                                         Member Since
                                     </p>
                                     <p className="text-sm">
-                                        {new Date(
-                                            profile.created_at
-                                        ).toLocaleDateString("en-US", {
-                                            year: "numeric",
-                                            month: "long",
-                                            day: "numeric",
-                                        })}
+                                        {accountCreationDate}
                                     </p>
                                 </div>
                                 <div className="space-y-1">
@@ -1412,13 +1499,7 @@ export default function ProfilePage() {
                                         Last Updated
                                     </p>
                                     <p className="text-sm">
-                                        {new Date(
-                                            profile.updated_at
-                                        ).toLocaleDateString("en-US", {
-                                            year: "numeric",
-                                            month: "long",
-                                            day: "numeric",
-                                        })}
+                                        {formatDate(profile.updated_at)}
                                     </p>
                                 </div>
                             </div>

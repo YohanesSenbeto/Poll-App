@@ -5,16 +5,27 @@ import { NextRequest, NextResponse } from 'next/server';
 export async function POST(request: NextRequest) {
     try {
         const cookieStore = await cookies();
-        const supabase = createServerComponentClient({ cookies });
+        const supabase = createServerComponentClient({ cookies: () => Promise.resolve(cookieStore) });
 
-        // Get the authenticated user
+        // Get the authenticated user (or handle guest)
         const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-        if (authError || !user) {
-            return NextResponse.json(
-                { error: 'Authentication required' },
-                { status: 401 }
-            );
+        
+        let userId: string;
+        
+        if (user) {
+            userId = user.id;
+        } else {
+            // Guest user - create a deterministic user ID
+            const { guestName } = await request.json();
+            if (!guestName || guestName.trim().length === 0) {
+                return NextResponse.json(
+                    { error: 'Guest name is required for anonymous voting' },
+                    { status: 400 }
+                );
+            }
+            
+            const clientIP = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown';
+            userId = `guest_${Buffer.from(guestName + clientIP).toString('base64').slice(0, 16)}`;
         }
 
         const { pollId, optionText } = await request.json();
@@ -44,7 +55,7 @@ export async function POST(request: NextRequest) {
                         id: pollId,
                         title: 'Programming Language Popularity',
                         description: 'Vote for your favorite programming language',
-                        user_id: user.id,
+                        user_id: user?.id || 'system',
                         is_active: true,
                         created_at: new Date().toISOString(),
                         updated_at: new Date().toISOString(),
@@ -110,7 +121,7 @@ export async function POST(request: NextRequest) {
             .from('votes')
             .select('*')
             .eq('poll_id', pollId)
-            .eq('user_id', user.id)
+            .eq('user_id', userId)
             .single();
 
         if (existingVote) {
@@ -133,7 +144,7 @@ export async function POST(request: NextRequest) {
                 .insert({
                     poll_id: pollId,
                     option_id: optionId,
-                    user_id: user.id,
+                    user_id: userId,
                     created_at: new Date().toISOString(),
                 });
 

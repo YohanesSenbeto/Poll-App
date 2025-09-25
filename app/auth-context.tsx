@@ -18,6 +18,7 @@ interface AuthContextType {
     signIn: (email: string, password: string) => Promise<void>;
     signUp: (email: string, password: string) => Promise<void>;
     signOut: () => Promise<void>;
+    refreshUserProfile: () => Promise<void>;
     isAdmin: boolean;
     isModerator: boolean;
     hasPermission: (permission: string, resource: string, action: string) => Promise<boolean>;
@@ -114,6 +115,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                     setUser(currentUser);
 
                     if (currentUser) {
+                        console.log("Auth context - User object:", currentUser);
+                        console.log("Auth context - User created_at:", currentUser.created_at);
                         const { role, profile } = await checkUserRoleAndProfile(currentUser.id);
                         setUserRole(role);
                         setUserProfile(profile);
@@ -230,6 +233,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
     };
 
+    const refreshUserProfile = async () => {
+        if (!user) return;
+        
+        try {
+            // Clear cache to force fresh data
+            const cacheKey = `user_${user.id}`;
+            if (typeof window !== "undefined") {
+                sessionStorage.removeItem(cacheKey);
+            }
+            
+            // Fetch fresh profile data
+            const { role, profile } = await checkUserRoleAndProfile(user.id);
+            setUserRole(role);
+            setUserProfile(profile);
+            
+            console.log("User profile refreshed:", profile);
+        } catch (error) {
+            console.error("Error refreshing user profile:", error);
+        }
+    };
+
     const isAdmin = userRole === "admin";
     const isModerator = userRole === "moderator" || userRole === "admin";
 
@@ -266,6 +290,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 signIn,
                 signUp,
                 signOut,
+                refreshUserProfile,
                 isAdmin,
                 isModerator,
                 hasPermission,
