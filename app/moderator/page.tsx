@@ -131,8 +131,7 @@ export default function ModeratorDashboard() {
 
     const handlePollAction = async (pollId: string, action: 'activate' | 'deactivate') => {
         try {
-            const { error } = await supabase
-                .from('polls')
+            const { error } = await (supabase.from('polls') as any)
                 .update({ is_active: action === 'activate' })
                 .eq('id', pollId);
 
@@ -151,8 +150,7 @@ export default function ModeratorDashboard() {
 
     const handleUserAction = async (userId: string, action: 'activate' | 'deactivate') => {
         try {
-            const { error } = await supabase
-                .from('user_profiles')
+            const { error } = await (supabase.from('user_profiles') as any)
                 .update({ is_active: action === 'activate' })
                 .eq('user_id', userId);
 

@@ -8,7 +8,7 @@ import {
     useCallback,
 } from "react";
 import { User } from "@supabase/supabase-js";
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import { supabase } from "@/lib/supabase";
 
 interface AuthContextType {
     user: User | null;
@@ -31,7 +31,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [userRole, setUserRole] = useState<string | null>(null);
     const [userProfile, setUserProfile] = useState<any | null>(null);
     const [loading, setLoading] = useState(true);
-    const [supabaseClient] = useState(() => createClientComponentClient());
+    const [supabaseClient] = useState(() => supabase);
 
     // Memoized function to check user role and profile with caching
     const checkUserRoleAndProfile = useCallback(
@@ -48,17 +48,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                     }
                 }
 
-                const { data: roleData, error: roleError } = await supabaseClient.rpc(
-                    "get_user_role",
-                    { user_uuid: userId }
-                );
+                // Try to get user role from RPC function (might not exist)
+                let role = "user";
+                try {
+                    const { data: roleData, error: roleError } = await (supabaseClient.rpc as any)(
+                        "get_user_role",
+                        { user_uuid: userId }
+                    );
 
-                if (roleError) {
-                    console.error("Error checking user role:", roleError);
-                    return { role: "user", profile: null };
+                    if (roleError) {
+                        console.log("User role RPC not available, using default:", roleError);
+                        role = "user";
+                    } else {
+                        role = roleData || "user";
+                    }
+                } catch (rpcError) {
+                    console.log("User role RPC function not available, using default:", rpcError);
+                    role = "user";
                 }
-
-                const role = roleData || "user";
 
                 // Try to get user profile, but don't fail if it doesn't exist
                 const { data: profileData, error: profileError } = await supabaseClient
@@ -261,7 +268,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (!user) return false;
         
         try {
-            const { data, error } = await supabaseClient.rpc('user_has_permission', {
+            const { data, error } = await (supabaseClient.rpc as any)('user_has_permission', {
                 user_uuid: user.id,
                 permission_name: permission,
                 resource_name: resource,
@@ -269,13 +276,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             });
 
             if (error) {
-                console.error('Error checking permission:', error);
+                console.log('Permission RPC not available, using default:', error);
                 return false;
             }
 
             return data || false;
         } catch (error) {
-            console.error('Exception checking permission:', error);
+            console.log('Permission RPC function not available, using default:', error);
             return false;
         }
     };

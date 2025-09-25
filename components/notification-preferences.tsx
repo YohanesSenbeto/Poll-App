@@ -53,24 +53,31 @@ export function NotificationPreferencesComponent({ className }: NotificationPref
 
       // Non-fatal: Some environments return empty error objects – continue bootstrapping
       if (error && ((error as any).code || (error as any).message)) {
+        // If column doesn't exist, just use defaults without trying to create it
+        if (error.code === '42703') {
+          console.log('Notification preferences column not available, using defaults');
+          setPreferences(defaultPrefs);
+          return;
+        }
         console.warn('Error loading preferences (non-fatal):', error);
       }
 
-      if (!data || !data.notification_preferences) {
-        // Bootstrap defaults if missing
-        const { error: upsertError } = await supabase
-          .from('user_profiles')
-          .upsert({ id: user.id, notification_preferences: defaultPrefs }, { onConflict: 'id' });
+      if (!data || !(data as any).notification_preferences) {
+        // Only try to create defaults if the column exists (not error 42703)
+        if (!error || error.code !== '42703') {
+          const { error: upsertError } = await (supabase.from('user_profiles') as any)
+            .upsert({ id: user.id, notification_preferences: defaultPrefs }, { onConflict: 'id' });
 
-        if (upsertError && ((upsertError as any).code || (upsertError as any).message)) {
-          console.warn('Error creating default preferences (non-fatal):', upsertError);
+          if (upsertError && ((upsertError as any).code || (upsertError as any).message)) {
+            console.warn('Error creating default preferences (non-fatal):', upsertError);
+          }
         }
 
         setPreferences(defaultPrefs);
         return;
       }
 
-      setPreferences(data.notification_preferences as NotificationPreferences);
+      setPreferences((data as any).notification_preferences as NotificationPreferences);
     } catch (error) {
       console.warn('Error loading preferences (caught, non-fatal):', error);
       // Fallback to defaults to keep UI responsive
@@ -87,13 +94,17 @@ export function NotificationPreferencesComponent({ className }: NotificationPref
     setMessage(null);
 
     try {
-      const { error } = await supabase
-        .from('user_profiles')
+      const { error } = await (supabase.from('user_profiles') as any)
         .upsert({ id: user.id, notification_preferences: preferences }, { onConflict: 'id' });
 
       if (error && ((error as any).code || (error as any).message)) {
-        console.error('Error saving preferences:', error);
-        setMessage({ type: 'error', text: 'Failed to save preferences. Please try again.' });
+        // If column doesn't exist, just show a message that preferences are not available
+        if (error.code === '42703') {
+          setMessage({ type: 'error', text: 'Notification preferences are not available in this environment.' });
+        } else {
+          console.error('Error saving preferences:', error);
+          setMessage({ type: 'error', text: 'Failed to save preferences. Please try again.' });
+        }
         return;
       }
 

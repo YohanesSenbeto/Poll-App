@@ -641,7 +641,7 @@ export default function ProfilePage() {
             console.log("Updating user profile with avatar URL:", publicUrl);
             const { data: updateData, error: avatarSaveError } = await supabase
                 .from('user_profiles')
-                .update({ avatar_url: publicUrl })
+                .update({ avatar_url: publicUrl } as any)
                 .eq('id', user.id)
                 .select();
 
@@ -716,7 +716,7 @@ export default function ProfilePage() {
             } else {
                 const { error: insErr } = await supabase
                     .from('user_profiles')
-                    .insert({ id: user.id, ...updatesDb });
+                    .insert({ id: user.id, ...updatesDb } as any);
                 writeError = insErr;
             }
 

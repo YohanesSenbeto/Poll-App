@@ -108,7 +108,7 @@ export function ProfilePhotoUploadCard({ isOpen, onClose, position }: ProfilePho
             // Update profile
             const { error: updateError } = await supabase
                 .from('user_profiles')
-                .update({ avatar_url: publicUrl })
+                .update({ avatar_url: publicUrl } as any)
                 .eq('id', user.id);
 
             if (updateError) {
@@ -152,7 +152,7 @@ export function ProfilePhotoUploadCard({ isOpen, onClose, position }: ProfilePho
             // Update profile to remove avatar
             const { error: updateError } = await supabase
                 .from('user_profiles')
-                .update({ avatar_url: null })
+                .update({ avatar_url: null } as any)
                 .eq('id', user.id);
 
             if (updateError) {

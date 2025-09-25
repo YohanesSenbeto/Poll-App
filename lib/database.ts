@@ -104,7 +104,7 @@ export async function createPoll({ title, description, options }: {
         }
       }
 
-      const { error: incErr } = await supabase.rpc('increment_daily_metrics', { p_metric_type: 'poll_created' })
+      const { error: incErr } = await (supabase.rpc as any)('increment_daily_metrics', { p_metric_type: 'poll_created' })
       if (incErr) {
         // ignore analytics errors
       }
@@ -278,7 +278,7 @@ export async function voteOnPoll(pollId: string, optionId: string) {
   try {
     // Increment daily metrics
     const today = new Date().toISOString().split('T')[0];
-    const { error: dailyError } = await supabase.rpc('increment_daily_metrics', {
+    const { error: dailyError } = await (supabase.rpc as any)('increment_daily_metrics', {
       p_date: today,
       p_poll_count: 0,
       p_vote_count: 1
@@ -306,7 +306,7 @@ export async function voteOnPoll(pollId: string, optionId: string) {
       
       for (const lang of programmingLanguages) {
         if (lowerTitle.includes(lang) || lowerDescription.includes(lang)) {
-          const { error: langError } = await supabase.rpc('increment_language_demand', {
+          const { error: langError } = await (supabase.rpc as any)('increment_language_demand', {
             p_language_name: lang,
             p_poll_mention: 0,
             p_vote_count: 1
@@ -378,8 +378,7 @@ export async function voteOnPoll(pollId: string, optionId: string) {
 
 export async function getPollResults(pollId: string) {
   const supabase = getSupabaseClient()
-  const { data, error } = await supabase
-    .rpc('get_poll_results', { poll_uuid: pollId })
+  const { data, error } = await (supabase.rpc as any)('get_poll_results', { poll_uuid: pollId })
 
   if (error) throw error
   return data

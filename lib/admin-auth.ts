@@ -201,7 +201,7 @@ export async function updateUserRole(
     // Update user role
     const { error } = await supabase
       .from('user_profiles')
-      .update({ role: newRole })
+      .update({ role: newRole } as any)
       .eq('user_id', targetUserId);
 
     if (error) {
@@ -293,7 +293,7 @@ export async function logAdminAction(
         target_id: targetId,
         target_type: targetType,
         action_details: actionDetails || {}
-      });
+      } as any);
 
     if (error) {
       console.error('Error logging admin action:', error);

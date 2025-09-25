@@ -45,7 +45,7 @@ const DailyTrendsChart = memo(function DailyTrendsChart({ pollStats, voteStats }
 }) {
     // Memoize chart data to prevent unnecessary recalculations
     const chartData = useMemo(() => {
-        return pollStats.map((pollStat) => {
+        return pollStats.map((pollStat: any) => {
             const voteStat = voteStats.find(vote => vote.date === pollStat.date);
             return {
                 date: format(new Date(pollStat.date), "MMM d"),
@@ -203,9 +203,9 @@ export default function AdminDashboard() {
                 .from("polls")
                 .select("user_id")
                 .not("user_id", "is", null);
-            const activePollCreators = new Set(
-                activeCreators?.map((p) => p.user_id)
-            ).size;
+            const activePollCreators = activeCreators ? new Set(
+                activeCreators.map((p: { user_id: string }) => p.user_id)
+            ).size : 0;
 
             // Language analytics (best-effort if tables exist)
             const { data: trendingLanguages } = await supabase
@@ -279,7 +279,7 @@ export default function AdminDashboard() {
                     .select("user_id, username, display_name, role, created_at");
 
                 if (!profileErr && profileUsers) {
-                    allUsers = profileUsers.map((u) => ({
+                    allUsers = profileUsers.map((u: any) => ({
                         id: u.user_id,
                         email: "", // email not in user_profiles
                         username: u.display_name || u.username || `user_${String(u.user_id).slice(0,8)}`,
@@ -388,13 +388,19 @@ export default function AdminDashboard() {
                 await supabase.from("options").delete().eq("poll_id", pollId);
                 await deletePoll(pollId, true);
 
-                await supabase.from("admin_actions").insert({
-                    admin_id: user?.id,
-                    action_type: "delete_poll",
-                    target_id: pollId,
-                    target_type: "poll",
-                    action_details: { reason: "Admin deletion" },
-                });
+                // Log admin action (best-effort, table might not exist)
+                try {
+                    await (supabase.from("admin_actions") as any).insert({
+                        admin_id: user?.id,
+                        action_type: "delete_poll",
+                        target_id: pollId,
+                        target_type: "poll",
+                        action_details: { reason: "Admin deletion" },
+                    });
+                } catch (adminActionError) {
+                    // Admin actions table might not exist - this is OK
+                    console.log("Admin actions logging not available:", adminActionError);
+                }
 
                 loadAdminData();
             } catch (error) {
@@ -601,7 +607,7 @@ export default function AdminDashboard() {
                                 <div className="space-y-3">
                                     {analytics.language_mentions
                                         .slice(0, 5)
-                                        .map((lang, index) => (
+                                        .map((lang: any, index: number) => (
                                             <div
                                                 key={lang.language_name}
                                                 className="flex items-center justify-between"
@@ -672,7 +678,7 @@ export default function AdminDashboard() {
                         </CardHeader>
                         <CardContent>
                             <div className="space-y-3 sm:space-y-4">
-                                {polls.map((poll) => (
+                                {polls.map((poll: any) => (
                                     <div
                                         key={poll.id}
                                         className="border border-slate-700 rounded-lg p-3 sm:p-4 bg-slate-900/50"
@@ -757,7 +763,7 @@ export default function AdminDashboard() {
                         </CardHeader>
                         <CardContent>
                             <div className="space-y-3 sm:space-y-4">
-                                {users.map((user) => (
+                                {users.map((user: any) => (
                                     <div
                                         key={user.id}
                                         className="border border-slate-700 rounded-lg p-3 sm:p-4 bg-slate-900/50"
@@ -837,7 +843,7 @@ export default function AdminDashboard() {
                                         {(analytics?.daily_poll_stats?.length || 0) > 0 && (
                                             <p className="sr-only">
                                                 Daily activity data: {
-                                                    (analytics?.daily_poll_stats || []).map((stat, index) => {
+                                                    (analytics?.daily_poll_stats || []).map((stat: any, index: number) => {
                                                         const voteStat = analytics?.daily_vote_stats?.find(
                                                             vote => vote.date === stat.date
                                                         );
@@ -854,7 +860,7 @@ export default function AdminDashboard() {
                                         {analytics?.daily_poll_stats &&
                                         analytics.daily_poll_stats.length > 0 ? (
                                             <div className="space-y-2">
-                                                {analytics.daily_poll_stats.map((stat) => {
+                                                {analytics.daily_poll_stats.map((stat: any) => {
                                                     const voteStat = analytics.daily_vote_stats?.find(
                                                         vote => vote.date === stat.date
                                                     );

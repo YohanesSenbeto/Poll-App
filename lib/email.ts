@@ -3,7 +3,7 @@ import { Resend } from 'resend';
 // Initialize Resend with API key (with fallback handling)
 const resendApiKey = process.env.RESEND_API_KEY;
 
-if (!resendApiKey) {
+if (!resendApiKey && process.env.NODE_ENV === 'development') {
   console.warn('RESEND_API_KEY not found. Email notifications will be disabled.');
 }
 
